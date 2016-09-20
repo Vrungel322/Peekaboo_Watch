@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.wearable.view.BoxInsetLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/container"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context="com.skinterface.demo.android.MainActivity"
+    tools:deviceIds="wear">
+
+    <com.skinterface.demo.android.RsvpView
+        android:id="@+id/rsvp"
+        android:layout_width="match_parent"
+        android:layout_height="160px"
+        android:layout_gravity="center_vertical|fill_horizontal"
+        app:layout_box="all"
+        />
+
+    <TextView
+        android:id="@+id/text"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:text="@string/hello_world"
+        app:layout_box="all" />
+
+    <TextView
+        android:id="@+id/clock"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="bottom|start"
+        android:textColor="@android:color/white"
+        app:layout_box="all" />
+
+</android.support.wearable.view.BoxInsetLayout>

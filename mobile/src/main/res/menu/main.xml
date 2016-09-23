@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:app="http://schemas.android.com/apk/res-auto"
+      xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <item android:title="Play test 1"
+          android:id="@+id/play1"
+          app:showAsAction="never"
+        />
+    <item android:title="Play text 2"
+          android:id="@+id/play2"
+          app:showAsAction="never"
+        />
+    <item android:title="Stop"
+          android:id="@+id/stop"/>
+    <item android:title="Notify Wearable"
+          android:id="@+id/notify"/>
+    <item android:title="Hello UpStars"
+          android:id="@+id/hello"
+          app:showAsAction="never"
+        />
+</menu>

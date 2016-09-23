@@ -7,7 +7,6 @@ import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Date;
 
 /**
  * Words for Rapid Serial Visual Presentation
@@ -15,8 +14,8 @@ import java.util.Date;
 public final class RsvpWords {
 
     public static final int DEFAULT_WEIGHT = 6;
-    private static final char WORD_JOINER = ' '; // '·'
-    private static final char WORD_SHY = '\u00AD';
+    public static final char WORD_JOINER = ' '; // '·'
+    public static final char WORD_SHY = '\u00AD';
 
     // Just-read Title
     public static final int JR_TITLE   = 1;
@@ -80,28 +79,29 @@ public final class RsvpWords {
         words.add(new Word('\0', "", DEFAULT_WEIGHT));
         return this;
     }
-    public RsvpWords addTitleWords(DEntity entity) {
+    public RsvpWords addTitleWords(SEntity entity) {
         justRead |= JR_TITLE;
         return addWords("Title", '§', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
     }
-    public RsvpWords addIntroWords(DEntity entity) {
+    public RsvpWords addIntroWords(SEntity entity) {
         justRead |= JR_INTRO;
         return addWords("Intro", '¶', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
     }
-    public RsvpWords addArticleWords(DEntity entity) {
+    public RsvpWords addArticleWords(SEntity entity) {
         justRead |= JR_ARTICLE;
         return addWords("Article", '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
     }
-    public RsvpWords addMenuWords(int idx, DEntity entity) {
+    public RsvpWords addMenuWords(int idx, SEntity entity) {
         return addWords("Menu "+Integer.toString(1+idx), (char)('1'+idx), entity == null ? "***" : entity.data, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addWarning(String text) {
         justRead |= JR_WARNING;
         return addWords("Warning", '⚠', text, 3*DEFAULT_WEIGHT);
     }
-    public RsvpWords addValueWords(DSect entity) {
-        if (entity == null || !entity.isValue)
+    public RsvpWords addValueWords(SSect sect) {
+        if (sect == null || !sect.isValue)
             return this;
+        SEntity entity = sect.entity;
         justRead |= JR_VALUE;
         char ch = '#';
         if ("date".equals(entity.media) || "datetime".equals(entity.media))
@@ -178,7 +178,7 @@ public final class RsvpWords {
         return weight;
     }
 
-    private String makeValueText(DEntity value) {
+    private String makeValueText(SEntity value) {
         if (value == null)
             return null;
         if (value.data == null || value.data.isEmpty())
@@ -187,7 +187,7 @@ public final class RsvpWords {
             case "geolocation":
                 try {
                     JSONObject jobj = new JSONObject(value.data);
-                    if (jobj != null && jobj.has("address"))
+                    if (jobj.has("address"))
                         return jobj.getString("address");
                 } catch (Exception e) {
                     addWarning("Bad location value");

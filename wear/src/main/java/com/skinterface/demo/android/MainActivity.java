@@ -59,7 +59,7 @@ public class MainActivity extends WearableActivity
         setIntent(intent);
 
         if (intent.hasExtra("RSVP_DATA")) {
-            DEntity entity = new DEntity();
+            SEntity entity = new SEntity();
             entity.data = intent.getStringExtra("RSVP_DATA");
             if (entity.data == null || entity.data.length() == 0) {
                 RsvpWords words = new RsvpWords();
@@ -70,7 +70,7 @@ public class MainActivity extends WearableActivity
                 mRsvpView.play(words);
             }
         } else {
-            DEntity entity = new DEntity();
+            SEntity entity = new SEntity();
             entity.data =
                     "      Best action: attention. The hardest day of the Moon cycle. Best you can do on\n" +
                             "      the day is carrying the trash out, mend holes and don’t get into anything.\n" +

@@ -46,7 +46,7 @@ class Action {
             JsonObject jparams = new JsonObject();
             for (Map.Entry<String, String> e : params.entrySet()) {
                 if (e.getValue() != null)
-                    jcmd.addProperty(e.getKey(), e.getValue());
+                    jparams.addProperty(e.getKey(), e.getValue());
             }
             jcmd.add("params", jparams);
         }

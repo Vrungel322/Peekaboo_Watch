@@ -1,10 +1,12 @@
 package com.skinterface.demo.android;
 
+import android.content.DialogInterface;
 import android.os.Handler;
 import android.os.Looper;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
 import android.os.Bundle;
+import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.text.Spannable;
@@ -14,6 +16,8 @@ import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
+import android.widget.ArrayAdapter;
+import android.widget.ListAdapter;
 import android.widget.TextView;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -63,19 +67,19 @@ public class MainActivity extends AppCompatActivity
     public static final String RSVP_PLAY_MESSAGE_PATH = "/rsvp_demo/play";
     public static final String RSVP_STOP_MESSAGE_PATH = "/rsvp_demo/stop";
 
-    private static Charset utf8 = Charset.forName("UTF-8");
+    final static Charset utf8 = Charset.forName("UTF-8");
 
     static final int CAPS = 0;
-    static final String JSON_URL = "http://192.168.2.157:8888/Service";
+    static final String JSON_URL = "http://192.168.1.100:8888/Service";
 
-    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
-    private final Handler handler = new Handler(Looper.getMainLooper());
+    final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+    final Handler handler = new Handler(Looper.getMainLooper());
 
     GoogleApiClient mGoogleApiClient;
-    private boolean connected;
-    private Set<Node> wearNodes = Collections.emptySet();
-    private TextView tvText;
-    private TextView tvStatus;
+    boolean connected;
+    Set<Node> wearNodes = Collections.emptySet();
+    TextView tvText;
+    TextView tvStatus;
 
     String sessionID;
     Map<String,String> storage = new HashMap<>();
@@ -83,9 +87,8 @@ public class MainActivity extends AppCompatActivity
     // Main site menu
     //MenuBar menu_main;
 
-    // Current menu
+    // Loaded size menu
     SSect wholeMenuTree;
-    SSect currentMenu;
     // Current data
     SSect currentData;
     // describes what was just presented (shown, read) to user
@@ -111,10 +114,6 @@ public class MainActivity extends AppCompatActivity
         setSupportActionBar(mToolbar);
         tvText = (TextView)findViewById(R.id.text);
         tvStatus = (TextView)findViewById(R.id.status);
-        findViewById(R.id.play1).setOnClickListener(this);
-        findViewById(R.id.play2).setOnClickListener(this);
-        findViewById(R.id.stop).setOnClickListener(this);
-        findViewById(R.id.notify).setOnClickListener(this);
 
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(this)
@@ -142,7 +141,7 @@ public class MainActivity extends AppCompatActivity
         doAction(v.getId());
     }
 
-    private boolean doAction(int id) {
+    boolean doAction(int id) {
         if (id == R.id.notify) {
             int notificationId = 001;
             // Build intent for notification content
@@ -168,33 +167,6 @@ public class MainActivity extends AppCompatActivity
             notificationManager.notify(notificationId, notificationBuilder.build());
             return true;
         }
-        if (id == R.id.play1) {
-            requestPlay("Луна в Овне\n" +
-                    "Достаточно острое положение для Луны. Естественная физиологическая\n" +
-                    "чувствительность притуплена тем, что Вы не проводите энергию через тело, она\n" +
-                    "головой опосредована. С одной стороны, в эти дни тело становится как бы более\n" +
-                    "выносливым, но это только на поверхности, т.к. просто тело не чувствует\n" +
-                    "усталости и других своих потребностей. Тогда ощущения и питание, любое\n" +
-                    "обслуживание тела происходят “от головы”, т.е. завязаны на принятые вами нормы и\n" +
-                    "правила. Зато, если Вы тренированный человек – легко сможете уговорить себя\n" +
-                    "выздороветь. Мозг при таком положении Луны перенасыщен энергией. Если специально\n" +
-                    "не расслабляться - головные боли, головокружения, испорченные зубы (в т.ч.\n" +
-                    "механически)и нарушения сна. В эти дни хорошо идёт острая, свежая пища, мясное.\n" +
-                    "Противопоказаны манипуляции с зубами, лицевая пластика.");
-        }
-        if (id == R.id.play2) {
-            requestPlay("Луна в Тельце\n" +
-                    "Плодородное положение Луны. Она даёт много энергии для роста, движения. Хорошие\n" +
-                    "дни для ухаживания за организмом другого человека, животных, растений, для\n" +
-                    "рутинной, постоянной работы. Можете получить удовольствие от вязания, например.\n" +
-                    "Выносливость в эти дни выше, нагрузки можно увеличить, а вот подняться тяжелее.\n" +
-                    "Заболевшее горло говорит скорее о недостатке нагрузки. В питании в эти дни\n" +
-                    "организм неприхотлив, переварить может много чего. Хороши заниматься хозяйством.\n" +
-                    "Эти дни придают телу специфическое очарование здорового животного.\n" +
-                    "\n" +
-                    "Противопоказаны манипуляции с нижней челюстью, горлом.");
-            return true;
-        }
         if (id == R.id.stop) {
             requestPlay(null);
             return true;
@@ -212,10 +184,20 @@ public class MainActivity extends AppCompatActivity
                     String id = jobj.getAsJsonObject().get("session").getAsString();
                     if (sessionID == null || !sessionID.equals(result))
                         sessionID = id;
+                    executeAction(new Action("menu").add("sectID", "site-nav-menu"));
                     executeAction(new Action("home"));
                 }
             });
         }
+        if (id == R.id.sf_menu) {
+            showMenu(wholeMenuTree);
+            return true;
+        }
+        if (id == R.id.sf_where) {
+            executeAction(new Action("where"));
+            return true;
+        }
+
         return false;
     }
 
@@ -256,7 +238,7 @@ public class MainActivity extends AppCompatActivity
         connected = false;
     }
 
-    private void setupRsvpNodes() {
+    void setupRsvpNodes() {
         Wearable.CapabilityApi.getCapability( mGoogleApiClient, RSVP_CAPABILITY,
                 CapabilityApi.FILTER_REACHABLE).setResultCallback(
                 new ResultCallback<CapabilityApi.GetCapabilityResult>() {
@@ -273,10 +255,10 @@ public class MainActivity extends AppCompatActivity
     public void onCapabilityChanged(CapabilityInfo capabilityInfo) {
         updateRsvpNodes(capabilityInfo);
     }
-    private void updateRsvpNodes(CapabilityInfo capabilityInfo) {
+    void updateRsvpNodes(CapabilityInfo capabilityInfo) {
         wearNodes = capabilityInfo.getNodes();
     }
-    private String pickBestNodeId() {
+    String pickBestNodeId() {
         String bestNodeId = null;
         // Find a nearby node or pick one arbitrarily
         for (Node node : wearNodes) {
@@ -287,7 +269,7 @@ public class MainActivity extends AppCompatActivity
         return bestNodeId;
     }
 
-    private void requestPlay(String text) {
+    void requestPlay(String text) {
         tvText.setText(text==null?"":text);
         String nodeId = pickBestNodeId();
         if (nodeId == null)
@@ -332,27 +314,7 @@ public class MainActivity extends AppCompatActivity
 
     void fillCommands() {
         currActions.clear();
-        if (currentMenu != null) {
-            currActions.add(SSect.makeAction("Stop", "stop"));
-            SSect menu = currentMenu;
-            if (menu != wholeMenuTree)
-                currActions.add(SSect.makeAction("Return UP", "return-up"));
-            if (menu.children != null && menu.children.length > 0) {
-                int len = menu.children.length;
-                for (int i = 1; i <= len; ++i) {
-                    SEntity title = menu.children[i-1].title;
-                    String text;
-                    if (title.data != null && "text".equalsIgnoreCase(title.media))
-                        text = i + ": " + title.data;
-                    else
-                        text = Integer.toString(i);
-                    currActions.add(SSect.makeAction(text, "menu").padd("to", Integer.toString(i)));
-                }
-            } else {
-                currActions.add(SSect.makeAction("Enter", "enter"));
-            }
-        }
-        else if (this.currentData != null) {
+        if (this.currentData != null) {
             SSect ds = this.currentData;
             SSect theNext = null;
             if (ds.children != null && ds.children.length > 0 && ds.currListPosition >= 0) {
@@ -468,7 +430,7 @@ public class MainActivity extends AppCompatActivity
 //        }
     }
 
-    private class ActionHandler implements Runnable {
+    class ActionHandler implements Runnable {
         Action action;
         ActionHandler(Action action) {
             this.action = action;
@@ -477,38 +439,18 @@ public class MainActivity extends AppCompatActivity
             setStatus("");
             String act = action.getAction();
             if ("list-next".equals(act)) {
-                if (currentMenu != null)
-                    titleChildAt(currentMenu.currListPosition+1);
-                else
-                    titleChildAt(currentData.currListPosition+1);
+                titleChildAt(currentData.currListPosition+1);
             }
             else if ("list-prev".equals(act)) {
-                if (currentMenu != null)
-                    titleChildAt(currentMenu.currListPosition-1);
-                else
-                    titleChildAt(currentData.currListPosition-1);
+                titleChildAt(currentData.currListPosition-1);
             }
             else if ("list-first".equals(act)) {
                 titleChildAt(0);
             }
             else if ("enter".equals(act)) {
-                if (currentMenu != null) {
-                    if (currentMenu.children != null) {
-                        int idx = currentMenu.currListPosition;
-                        if (idx >= 0 && idx < currentMenu.children.length)
-                            showMenu(currentMenu.children[idx]);
-                    } else {
-                        showMenu(currentMenu);
-                    }
-                } else {
-                    enterDown(currentData, action);
-                }
+                enterDown(currentData, action);
             }
             else if ("return-up".equals(act)) {
-                if (currentMenu != null) {
-                    showMenu(findParentMenu(wholeMenuTree, currentMenu));
-                    return;
-                }
                 returnUp(currentData, 0);
             }
             else if ("auto-next-up".equals(act)) {
@@ -522,9 +464,7 @@ public class MainActivity extends AppCompatActivity
                 returnUp(currentData, -1);
             }
             else if ("stop".equals(act)) {
-                if (currentMenu != null)
-                    currentMenu = null;
-                else if (currentData != null)
+                if (currentData != null)
                     currentData.currListPosition = -1;
                 enterToRoom(currentData);
             }
@@ -575,10 +515,7 @@ public class MainActivity extends AppCompatActivity
                 return;
             }
             else if ("where".equals(act)) {
-                if (currentMenu != null) {
-                    showMenu(currentMenu);
-                }
-                else if (currentData != null) {
+                if (currentData != null) {
                     showWhereAmIData(currentData);
                 }
                 else {
@@ -597,26 +534,17 @@ public class MainActivity extends AppCompatActivity
                 });
             }
             else if ("menu".equals(act)) {
-                if (currentMenu != null && action.val("to") != null) {
-                    try {
-                        int idx = Integer.parseInt(action.val("to"));
-                        if (idx > 0 && idx <= currentMenu.children.length)
-                            showMenu(currentMenu.children[idx - 1]);
-                    } catch (Exception e) { setStatus("Cannot goto: "+action.val("to"));}
-                    return;
-                }
                 action.add("sectID", "site-nav-menu-story");
                 serverCmd(action, new SrvCallback() {
                     @Override
                     public void onSuccess(String result) {
                         SSect ds = SSect.fromJson(result);
                         wholeMenuTree = ds;
-                        showMenu(ds);
                     }
                 });
             }
         }
-        private void returnUp(final SSect ds, final int lp_delta) {
+        void returnUp(final SSect ds, final int lp_delta) {
             if (ds == null || ds.returnUp == null)
                 return;
             justRead = 0;
@@ -659,7 +587,7 @@ public class MainActivity extends AppCompatActivity
                 }
             });
         }
-        private void enterDown(final SSect parent, final Action action) {
+        void enterDown(final SSect parent, final Action action) {
             serverCmd(action, new SrvCallback() {
                 @Override
                 public void onSuccess(String result) {
@@ -673,7 +601,7 @@ public class MainActivity extends AppCompatActivity
         }
     }
 
-    private void play(final RsvpWords words) {
+    void play(final RsvpWords words) {
         if (words == null || words.size() == 0) {
             tvStatus.setText("Empty data");
             justRead = 0;
@@ -685,13 +613,15 @@ public class MainActivity extends AppCompatActivity
         tvText.setText("");
         SpannableStringBuilder sb = new SpannableStringBuilder();
         for (RsvpWords.Part part : words.getText()) {
+            int pos = sb.length();
             String title = part.title+": ";
             sb.append(title);
-            sb.setSpan(new StyleSpan(android.graphics.Typeface.BOLD), 0, title.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            sb.append(part.text);
+            sb.setSpan(new StyleSpan(android.graphics.Typeface.BOLD), pos, pos+title.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            sb.append(part.text.replace('\n',' '));
             sb.append('\n');
         }
         tvText.setText(sb);
+        requestPlay(sb.toString());
     }
 
     protected void stopVoice() {
@@ -703,21 +633,7 @@ public class MainActivity extends AppCompatActivity
 
     protected void titleChildAt(int pos) {
         justRead = 0;
-        if (currentMenu != null) {
-            if (currentMenu.children == null || currentMenu.children.length == 0) {
-                currentMenu.currListPosition = -1;
-                play(new RsvpWords().addTitleWords(currentMenu.title));
-                return;
-            } else {
-                if (pos < 0)
-                    pos = 0;
-                if (pos >= currentMenu.children.length)
-                    pos = currentMenu.children.length - 1;
-                currentMenu.currListPosition = pos;
-                play(new RsvpWords().addTitleWords(currentMenu.children[pos].title));
-            }
-        }
-        else if (currentData != null) {
+        if (currentData != null) {
             if (currentData.children == null || currentData.children.length == 0) {
                 currentData.currListPosition = -1;
             } else {
@@ -832,27 +748,41 @@ public class MainActivity extends AppCompatActivity
         return null;
     }
 
-    protected void showMenu(SSect action) {
-        if (action == null) {
-            if (wholeMenuTree == null)
-                return;
-            action = wholeMenuTree;
-        }
-        action.currListPosition = -1;
+    protected void showMenu(final SSect action) {
+        if (action == null)
+            return;
         if (action.children != null && action.children.length > 0) {
-            currentMenu = action;
-            RsvpWords words = new RsvpWords();
-            for (int i=0; i < action.children.length; ++i) {
-                SSect a = action.children[i];
-                words.addMenuWords(i, a.title).addPause();
-            }
-            play(words);
+            final ArrayAdapter<SSect> adapter = new ArrayAdapter<>(MainActivity.this,
+                    android.R.layout.select_dialog_singlechoice,
+                    action.children);
+            new AlertDialog.Builder(MainActivity.this)
+                    .setTitle("UpStart Guide")
+                    .setNegativeButton(R.string.txt_cancel, new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            dialog.dismiss();
+                        }
+                    })
+                    .setNeutralButton(R.string.txt_back, new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            dialog.dismiss();
+                            showMenu(findParentMenu(wholeMenuTree, action));
+                        }
+                    })
+                    .setSingleChoiceItems(adapter, -1, new DialogInterface.OnClickListener() {
+                        @Override
+                        public void onClick(DialogInterface dialog, int which) {
+                            dialog.dismiss();
+                            SSect action = adapter.getItem(which);
+                            showMenu(action);
+                        }
+                    })
+                    .show();
         }
         else if (action.entity.data != null) {
-            currentMenu = null;
             makeActionHandler(action.entity).run();
         }
-        fillCommands();
     }
 
     interface SrvCallback {

@@ -2,20 +2,26 @@
 <menu xmlns:app="http://schemas.android.com/apk/res-auto"
       xmlns:android="http://schemas.android.com/apk/res/android">
 
-    <item android:title="Play test 1"
-          android:id="@+id/play1"
-          app:showAsAction="never"
-        />
-    <item android:title="Play text 2"
-          android:id="@+id/play2"
-          app:showAsAction="never"
-        />
-    <item android:title="Stop"
-          android:id="@+id/stop"/>
-    <item android:title="Notify Wearable"
-          android:id="@+id/notify"/>
-    <item android:title="Hello UpStars"
-          android:id="@+id/hello"
-          app:showAsAction="never"
-        />
+    <group android:checkableBehavior="single" android:id="@+id/grp1">
+        <item android:title="Stop Watch Rsvp"
+            android:checkable="false"
+            android:id="@+id/stop"/>
+        <item android:title="Notify Watch"
+            android:checkable="false"
+            android:id="@+id/notify"/>
+    </group>
+    <group android:checkableBehavior="single" android:id="@+id/grp2">
+        <item android:title="Hello UpStars"
+            android:checkable="false"
+            android:id="@+id/hello"
+            />
+        <item android:title="UpStars: Look Around"
+            android:checkable="false"
+            android:id="@+id/sf_where"
+            />
+        <item android:title="UpStars: Guide"
+            android:checkable="false"
+            android:id="@+id/sf_menu"
+            />
+    </group>
 </menu>

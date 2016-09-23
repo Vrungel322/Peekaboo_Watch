@@ -31,7 +31,7 @@ class SSect {
     static SSect fromJson(String json) {
         if (json == null)
             return null;
-        JsonElement jel = new Gson().toJsonTree(json);
+        JsonElement jel = new JsonParser().parse(json);
         if (!(jel.isJsonObject()))
             return null;
         return SSect.fromJson(jel.getAsJsonObject());
@@ -39,7 +39,7 @@ class SSect {
 
     static SSect fromJson(JsonObject jobj) {
         SSect ds = new SSect();
-        SEntity.fromJson(jobj, ds.entity);
+        SEntity.fromJson(jobj.get("entity").getAsJsonObject(), ds.entity);
         if (jobj.has("guid"))
             ds.guid = jobj.get("guid").getAsString();
         if (jobj.has("isAction"))
@@ -134,6 +134,12 @@ class SSect {
         else
             title.data = prefix;
         return this;
+    }
+
+    public String toString() {
+        if (title != null)
+            return title.data;
+        return "";
     }
 
 }

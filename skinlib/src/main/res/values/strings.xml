@@ -3,4 +3,6 @@
 
     <string name="txt_global">Global</string>
     <string name="txt_local">Local</string>
+    <string name="txt_cancel">Cancel</string>
+    <string name="txt_back">Back</string>
 </resources>

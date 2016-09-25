@@ -1,8 +1,11 @@
 package com.skinterface.demo.android;
 
-import com.google.gson.*;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.json.JSONTokener;
 
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 /**
@@ -20,47 +23,57 @@ class SEntity {
     static SEntity fromJson(String json, SEntity de) {
         if (json == null)
             return de;
-        JsonElement jel = new Gson().toJsonTree(json);
-        if (jel == null || !jel.isJsonObject())
+        JSONTokener tokener = new JSONTokener(json);
+        Object obj = null;
+        try { obj = tokener.nextValue(); } catch (JSONException e) {}
+        if (!(obj instanceof JSONObject) || obj == JSONObject.NULL)
             return de;
-        return SEntity.fromJson(jel.getAsJsonObject(), de);
+        return SEntity.fromJson((JSONObject) obj, de);
     }
 
-    static SEntity fromJson(JsonObject jobj, SEntity de) {
-        if (jobj == null || jobj.isJsonNull())
+    static SEntity fromJson(JSONObject jobj, SEntity de) {
+        if (jobj == null || jobj == JSONObject.NULL)
             return de;
-        if (de == null)
-            de = new SEntity();
-        if (jobj.has("media"))
-            de.media = jobj.get("media").getAsString();
-        if (jobj.has("role"))
-            de.role = jobj.get("role").getAsString();
-        if (jobj.has("name"))
-            de.name = jobj.get("name").getAsString();
-        if (jobj.has("data"))
-            de.data = jobj.get("data").getAsString();
-        if (jobj.has("props")) {
-            JsonObject jprops = jobj.get("props").getAsJsonObject();
-            for (Map.Entry<String, JsonElement> entry : jprops.entrySet())
-                de.padd(entry.getKey(), entry.getValue().getAsString());
-        }
+        try {
+            if (de == null)
+                de = new SEntity();
+            if (jobj.has("media"))
+                de.media = jobj.getString("media");
+            if (jobj.has("role"))
+                de.role = jobj.getString("role");
+            if (jobj.has("name"))
+                de.name = jobj.getString("name");
+            if (jobj.has("data"))
+                de.data = jobj.getString("data");
+            if (jobj.has("props")) {
+                JSONObject jprops = jobj.getJSONObject("props");
+                Iterator<String> keys = jprops.keys();
+                while (keys.hasNext()) {
+                    String key = keys.next();
+                    String val = jprops.getString(key);
+                    de.padd(key, val);
+                }
+            }
+        } catch (JSONException e) { de = null; }
         return de;
     }
 
-    public JsonObject fillJson(JsonObject jobj) {
-        jobj.addProperty("media", media);
-        if (role != null)
-            jobj.addProperty("role", role);
-        if (name != null)
-            jobj.addProperty("name", name);
-        if (data != null)
-            jobj.addProperty("data", data);
-        if (props != null && !props.isEmpty()) {
-            JsonObject jprops = new JsonObject();
-            for (Map.Entry<String,String> entry : props.entrySet())
-                jprops.addProperty(entry.getKey(), entry.getValue());
-            jobj.add("props", jprops);
-        }
+    public JSONObject fillJson(JSONObject jobj) {
+        try {
+            jobj.put("media", media);
+            if (role != null)
+                jobj.put("role", role);
+            if (name != null)
+                jobj.put("name", name);
+            if (data != null)
+                jobj.put("data", data);
+            if (props != null && !props.isEmpty()) {
+                JSONObject jprops = new JSONObject();
+                for (Map.Entry<String, String> entry : props.entrySet())
+                    jprops.put(entry.getKey(), entry.getValue());
+                jobj.put("props", jprops);
+            }
+        } catch (JSONException e) {}
         return jobj;
     }
 

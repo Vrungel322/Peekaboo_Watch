@@ -1,6 +1,9 @@
 package com.skinterface.demo.android;
 
-import com.google.gson.*;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+import org.json.JSONTokener;
 
 /**
  * Server-Section
@@ -31,68 +34,74 @@ class SSect {
     static SSect fromJson(String json) {
         if (json == null)
             return null;
-        JsonElement jel = new JsonParser().parse(json);
-        if (!(jel.isJsonObject()))
+        JSONTokener tokener = new JSONTokener(json);
+        Object obj = null;
+        try { obj = tokener.nextValue(); } catch (JSONException e) {}
+        if (!(obj instanceof JSONObject) || obj == JSONObject.NULL)
             return null;
-        return SSect.fromJson(jel.getAsJsonObject());
+        return SSect.fromJson((JSONObject) obj);
     }
 
-    static SSect fromJson(JsonObject jobj) {
+    static SSect fromJson(JSONObject jobj) {
         SSect ds = new SSect();
-        SEntity.fromJson(jobj.get("entity").getAsJsonObject(), ds.entity);
-        if (jobj.has("guid"))
-            ds.guid = jobj.get("guid").getAsString();
-        if (jobj.has("isAction"))
-            ds.isAction = jobj.get("isAction").getAsBoolean();
-        if (jobj.has("isValue"))
-            ds.isValue = jobj.get("isValue").getAsBoolean();
-        if (jobj.has("hasArticle"))
-            ds.hasArticle = jobj.get("hasArticle").getAsBoolean();
-        if (jobj.has("hasChildren"))
-            ds.hasChildren = jobj.get("hasChildren").getAsBoolean();
-        if (jobj.has("nextAsSkip"))
-            ds.nextAsSkip = jobj.get("nextAsSkip").getAsBoolean();
-        if (jobj.has("title"))
-            ds.title = SEntity.fromJson(jobj.get("title").getAsJsonObject(), null);
-        if (jobj.has("descr"))
-            ds.descr = SEntity.fromJson(jobj.get("descr").getAsJsonObject(), null);
-        if (jobj.has("children")) {
-            JsonArray jchildren = jobj.get("children").getAsJsonArray();
-            ds.children = new SSect[jchildren.size()];
-            for (int i=0; i < jchildren.size(); ++i)
-                ds.children[i] = SSect.fromJson(jchildren.get(i).getAsJsonObject());
-        }
+        try {
+            SEntity.fromJson(jobj.getJSONObject("entity"), ds.entity);
+            if (jobj.has("guid"))
+                ds.guid = jobj.getString("guid");
+            if (jobj.has("isAction"))
+                ds.isAction = jobj.getBoolean("isAction");
+            if (jobj.has("isValue"))
+                ds.isValue = jobj.getBoolean("isValue");
+            if (jobj.has("hasArticle"))
+                ds.hasArticle = jobj.getBoolean("hasArticle");
+            if (jobj.has("hasChildren"))
+                ds.hasChildren = jobj.getBoolean("hasChildren");
+            if (jobj.has("nextAsSkip"))
+                ds.nextAsSkip = jobj.getBoolean("nextAsSkip");
+            if (jobj.has("title"))
+                ds.title = SEntity.fromJson(jobj.getJSONObject("title"), null);
+            if (jobj.has("descr"))
+                ds.descr = SEntity.fromJson(jobj.getJSONObject("descr"), null);
+            if (jobj.has("children")) {
+                JSONArray jchildren = jobj.getJSONArray("children");
+                ds.children = new SSect[jchildren.length()];
+                for (int i = 0; i < jchildren.length(); ++i)
+                    ds.children[i] = SSect.fromJson(jchildren.getJSONObject(i));
+            }
+        } catch (JSONException e) {}
         return ds;
     }
 
-    public JsonObject fillJson(JsonObject jobj) {
-        jobj.add("entity", entity.fillJson(new JsonObject()));
-        if (guid != null)
-            jobj.addProperty("guid", guid);
-        if (isAction)
-            jobj.addProperty("isAction", isAction);
-        if (isValue)
-            jobj.addProperty("isValue", isValue);
-        if (hasArticle)
-            jobj.addProperty("hasArticle", hasArticle);
-        if (hasChildren)
-            jobj.addProperty("hasChildren", hasChildren);
-        if (nextAsSkip)
-            jobj.addProperty("nextAsSkip", nextAsSkip);
-        if (title != null)
-            jobj.add("title", title.fillJson(new JsonObject()));
-        if (descr != null)
-            jobj.add("descr", descr.fillJson(new JsonObject()));
-        if (children != null) {
-            JsonArray jchildren = new JsonArray();
-            for (SSect c : children) {
-                if (c == null)
-                    jchildren.add(JsonNull.INSTANCE);
-                else
-                    jchildren.add(c.fillJson(new JsonObject()));
+    public JSONObject fillJson(JSONObject jobj) {
+        try {
+            jobj.put("entity", entity.fillJson(new JSONObject()));
+            if (guid != null)
+                jobj.put("guid", guid);
+            if (isAction)
+                jobj.put("isAction", isAction);
+            if (isValue)
+                jobj.put("isValue", isValue);
+            if (hasArticle)
+                jobj.put("hasArticle", hasArticle);
+            if (hasChildren)
+                jobj.put("hasChildren", hasChildren);
+            if (nextAsSkip)
+                jobj.put("nextAsSkip", nextAsSkip);
+            if (title != null)
+                jobj.put("title", title.fillJson(new JSONObject()));
+            if (descr != null)
+                jobj.put("descr", descr.fillJson(new JSONObject()));
+            if (children != null) {
+                JSONArray jchildren = new JSONArray();
+                for (SSect c : children) {
+                    if (c == null)
+                        jchildren.put(JSONObject.NULL);
+                    else
+                        jchildren.put(c.fillJson(new JSONObject()));
+                }
+                jobj.put("children", jchildren);
             }
-            jobj.add("children", jchildren);
-        }
+        } catch (JSONException e) {}
         return jobj;
     }
 

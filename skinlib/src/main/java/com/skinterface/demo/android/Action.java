@@ -1,11 +1,9 @@
 package com.skinterface.demo.android;
 
-import com.google.gson.*;
+import org.json.JSONException;
+import org.json.JSONObject;
 
-import java.io.Serializable;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 class Action {
@@ -34,22 +32,24 @@ class Action {
         return a;
     }
 
-    public JsonObject serializeToCmd(String sessionId, int caps) {
-        JsonObject jcmd = new JsonObject();
-        if (sessionId != null)
-            jcmd.addProperty("session", sessionId);
-        if (caps != 0)
-            jcmd.addProperty("caps", caps);
-        if (action != null)
-            jcmd.addProperty("action", action);
-        if (params != null) {
-            JsonObject jparams = new JsonObject();
-            for (Map.Entry<String, String> e : params.entrySet()) {
-                if (e.getValue() != null)
-                    jparams.addProperty(e.getKey(), e.getValue());
+    public JSONObject serializeToCmd(String sessionId, int caps) {
+        JSONObject jcmd = new JSONObject();
+        try {
+            if (sessionId != null)
+                jcmd.put("session", sessionId);
+            if (caps != 0)
+                jcmd.put("caps", caps);
+            if (action != null)
+                jcmd.put("action", action);
+            if (params != null) {
+                JSONObject jparams = new JSONObject();
+                for (Map.Entry<String, String> e : params.entrySet()) {
+                    if (e.getValue() != null)
+                        jparams.put(e.getKey(), e.getValue());
+                }
+                jcmd.put("params", jparams);
             }
-            jcmd.add("params", jparams);
-        }
+        } catch (JSONException e) {}
         return jcmd;
     }
 

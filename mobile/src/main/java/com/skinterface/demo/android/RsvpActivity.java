@@ -1,36 +1,31 @@
 package com.skinterface.demo.android;
 
-import android.content.ComponentName;
-import android.content.Context;
 import android.content.DialogInterface;
-import android.content.Intent;
-import android.content.ServiceConnection;
-import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.IBinder;
 import android.os.Looper;
-import android.os.RemoteException;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
-import android.support.v7.widget.LinearLayoutManager;
-import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
-import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.util.Log;
-import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
-import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
-import android.widget.ImageButton;
 import android.widget.TextView;
+
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.wearable.CapabilityApi;
+import com.google.android.gms.wearable.CapabilityInfo;
+import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.Wearable;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -44,19 +39,27 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener
+public class RsvpActivity extends AppCompatActivity
+        implements View.OnClickListener, GoogleApiClient.ConnectionCallbacks,
+        GoogleApiClient.OnConnectionFailedListener, CapabilityApi.CapabilityListener
 {
 
     public static final String TAG = "SkinterPhone";
+
+    public static final String RSVP_CAPABILITY = "rsvp_demo";
+    public static final String RSVP_PLAY_MESSAGE_PATH = "/rsvp_demo/play";
+    public static final String RSVP_STOP_MESSAGE_PATH = "/rsvp_demo/stop";
 
     final static Charset utf8 = Charset.forName("UTF-8");
 
@@ -66,22 +69,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     final Handler handler = new Handler(Looper.getMainLooper());
 
-    private RsvpRequest mRsvpService;
-    private ServiceConnection mRsvpConnection = new ServiceConnection() {
-        public void onServiceConnected(ComponentName className, IBinder service) {
-            mRsvpService = RsvpRequest.Stub.asInterface(service);
-        }
-        public void onServiceDisconnected(ComponentName className) {
-            mRsvpService = null;
-        }
-    };
-
+    GoogleApiClient mGoogleApiClient;
+    boolean connected;
+    Set<Node> wearNodes = Collections.emptySet();
     TextView tvText;
     TextView tvStatus;
-    RecyclerView rvChildren;
-    View        grpForward;
-    ImageButton btnForward1;
-    ImageButton btnForward2;
 
     String sessionID;
     Map<String,String> storage = new HashMap<>();
@@ -93,10 +85,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     SSect wholeMenuTree;
     // Current data
     SSect currentData;
-    SSect actionAutoNext;
     // describes what was just presented (shown, read) to user
     int justRead;
 
+    List<SSect> rootActions = new ArrayList<>();
     List<SSect> currActions = new ArrayList<>();
 
     Queue<String> voiceQueue = new LinkedList<>();
@@ -116,15 +108,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         setSupportActionBar(mToolbar);
         tvText = (TextView)findViewById(R.id.text);
         tvStatus = (TextView)findViewById(R.id.status);
-        rvChildren = (RecyclerView) findViewById(R.id.children);
-        rvChildren.setLayoutManager(new LinearLayoutManager(this));
-        rvChildren.setHasFixedSize(false);
-        grpForward = findViewById(R.id.sf_forward);
-        btnForward1 = (ImageButton)findViewById(R.id.sf_forward1);
-        btnForward2 = (ImageButton)findViewById(R.id.sf_forward2);
-        grpForward.setVisibility(View.GONE);
-        btnForward1.setOnClickListener(this);
-        btnForward2.setOnClickListener(this);
+
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addConnectionCallbacks(this)
+                .addOnConnectionFailedListener(this)
+                // Request access only to the Wearable API
+                .addApi(Wearable.API) //addApiIfAvailable
+                .build();
     }
 
     @Override
@@ -147,7 +137,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     boolean doAction(int id) {
         if (id == R.id.rsvp_notify) {
-            int notificationId = 1;
+            int notificationId = 001;
             // Build intent for notification content
             //Intent viewIntent = new Intent(this, MainActivity.class);
             //viewIntent.putExtra(EXTRA_EVENT_ID, eventId);
@@ -172,47 +162,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             return true;
         }
         if (id == R.id.rsvp_stop) {
-            if (mRsvpService != null) {
-                try {
-                    mRsvpService.post("stop", null, null);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Error sending a message to RsvpService", e);
-                }
-            }
-            return true;
-        }
-        if (id == R.id.rsvp_hello) {
-            if (mRsvpService != null) {
-                try {
-                    mRsvpService.post("play", null,
-                            "With the help of our site you can know the details and the underlying " +
-                            "reasons for relations with any person - a partner, a new sympathy, " +
-                            "an old friend, your child, and check the compatibility of the child " +
-                            "and the nanny, colleagues in the work group and so long, and so forth.");
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Error sending a message to RsvpService", e);
-                }
-            }
-            return true;
-        }
-        if (id == R.id.chat_connect) {
-            if (mRsvpService != null) {
-                try {
-                    mRsvpService.post("chat-connect", null, null);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Error sending a message to RsvpService", e);
-                }
-            }
-            return true;
-        }
-        if (id == R.id.chat_disconnect) {
-            if (mRsvpService != null) {
-                try {
-                    mRsvpService.post("chat-disconnect", null, null);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Error sending a message to RsvpService", e);
-                }
-            }
+            requestPlay(null);
             return true;
         }
         if (id == R.id.sf_hello) {
@@ -250,24 +200,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             executeAction(new Action("where"));
             return true;
         }
-        if (id == R.id.sf_forward1 || id == R.id.sf_forward2) {
-            if (actionAutoNext != null)
-                makeActionHandler(actionAutoNext.entity).run();
-            return true;
-        }
 
         return false;
     }
 
     void setStatus(final String text) {
         if (Looper.getMainLooper().getThread() == Thread.currentThread()) {
-            if (text == null || text.length() == 0) {
-                tvStatus.setText("");
-                tvStatus.setVisibility(View.GONE);
-            } else {
-                tvStatus.setText(text);
-                tvStatus.setVisibility(View.VISIBLE);
-            }
+            tvStatus.setText(text == null ? "" : text);
             return;
         }
         handler.post(new Runnable() {
@@ -281,17 +220,70 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     @Override
     protected void onStart() {
         super.onStart();
-        bindService(new Intent(this, RsvpService.class), mRsvpConnection, Context.BIND_AUTO_CREATE);
+        mGoogleApiClient.connect();
     }
 
     @Override
-    protected void onStop() {
-        super.onStop();
-        if (mRsvpService != null) {
-            unbindService(mRsvpConnection);
-            mRsvpService = null;
-        }
+    public void onConnected(Bundle connectionHint) {
+        Log.d(TAG, "onConnected: " + connectionHint);
+        // Now you can use the Data Layer API
+        connected = true;
+        setupRsvpNodes();
     }
+    @Override
+    public void onConnectionSuspended(int cause) {
+        Log.d(TAG, "onConnectionSuspended: " + cause);
+        connected = false;
+    }
+    @Override
+    public void onConnectionFailed(ConnectionResult result) {
+        Log.d(TAG, "onConnectionFailed: " + result);
+        connected = false;
+    }
+
+    void setupRsvpNodes() {
+        Wearable.CapabilityApi.getCapability( mGoogleApiClient, RSVP_CAPABILITY,
+                CapabilityApi.FILTER_REACHABLE).setResultCallback(
+                new ResultCallback<CapabilityApi.GetCapabilityResult>() {
+            @Override
+            public void onResult(CapabilityApi.GetCapabilityResult result) {
+                if (result.getStatus().isSuccess())
+                    updateRsvpNodes(result.getCapability());
+            }
+        });
+        Wearable.CapabilityApi.addCapabilityListener(mGoogleApiClient, this, RSVP_CAPABILITY);
+    }
+
+    @Override
+    public void onCapabilityChanged(CapabilityInfo capabilityInfo) {
+        updateRsvpNodes(capabilityInfo);
+    }
+    void updateRsvpNodes(CapabilityInfo capabilityInfo) {
+        wearNodes = capabilityInfo.getNodes();
+    }
+    String pickBestNodeId() {
+        String bestNodeId = null;
+        // Find a nearby node or pick one arbitrarily
+        for (Node node : wearNodes) {
+            if (node.isNearby())
+                return node.getId();
+            bestNodeId = node.getId();
+        }
+        return bestNodeId;
+    }
+
+    void requestPlay(String text) {
+        tvText.setText(text==null?"":text);
+        String nodeId = pickBestNodeId();
+        if (nodeId == null)
+            return;
+        if (text == null)
+            Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_STOP_MESSAGE_PATH, null);
+        else
+            Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_PLAY_MESSAGE_PATH, text.getBytes(utf8));
+    }
+
+
 
     public void executeAction(Action action) {
         makeActionHandler(action).run();
@@ -325,7 +317,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     void fillCommands() {
         currActions.clear();
-        actionAutoNext = null;
         if (this.currentData != null) {
             SSect ds = this.currentData;
             SSect theNext = null;
@@ -394,12 +385,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     theNext = SSect.copyAction(ds).prependTitle("Continue: Go to ");
                 }
             }
-            actionAutoNext = theNext;
+            if (theNext != null)
+                currActions.add(0, theNext);
         }
         updateCommands();
     }
     void updateCommands() {
         ArrayList<SSect> actions = new ArrayList<>();
+        if (!rootActions.isEmpty()) {
+            actions.add(SSect.makeAction(getString(R.string.txt_global), null));
+            actions.addAll(rootActions);
+        }
         if (!currActions.isEmpty()) {
             actions.add(SSect.makeAction(getString(R.string.txt_local), null));
             actions.addAll(currActions);
@@ -435,23 +431,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 //
 //            actn_panel.add(w);
 //        }
-        {
-            if (actionAutoNext == null) {
-                grpForward.setVisibility(View.GONE);
-                btnForward2.setImageResource(0);
-            } else {
-                grpForward.setVisibility(View.VISIBLE);
-                String act = actionAutoNext.entity.data;
-                if ("read".equals(act))
-                    btnForward2.setImageResource(R.drawable.ic_format_align_left_black_48dp);
-                else if ("list-first".equals(act))
-                    btnForward2.setImageResource(R.drawable.ic_format_list_bulleted_black_48dp);
-                else if ("auto-next-up".equals(act))
-                    btnForward2.setImageResource(R.drawable.ic_playlist_play_black_48dp);
-                else if ("enter".equals(act))
-                    btnForward2.setImageResource(R.drawable.ic_exit_to_app_black_48dp);
-            }
-        }
     }
 
     class ActionHandler implements Runnable {
@@ -637,28 +616,26 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         tvText.setText("");
         SpannableStringBuilder sb = new SpannableStringBuilder();
         for (RsvpWords.Part part : words.getText()) {
-            String text = part.text == null ? "" : part.text.replace('\n',' ');
-            int beg = sb.length();
-            int end = beg + text.length();
-            sb.append(text);
-            if (part.type == RsvpWords.JR_TITLE) {
-                sb.setSpan(new RelativeSizeSpan(1.5f), beg, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-                sb.setSpan(new StyleSpan(Typeface.BOLD), beg, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            String title = null;
+            switch (part.type) {
+            case RsvpWords.JR_TITLE:   title = getString(R.string.txt_title); break;
+            case RsvpWords.JR_INTRO:   title = getString(R.string.txt_intro); break;
+            case RsvpWords.JR_ARTICLE: title = getString(R.string.txt_article); break;
+            case RsvpWords.JR_VALUE:   title = getString(R.string.txt_value); break;
+            case RsvpWords.JR_WARNING: title = getString(R.string.txt_warning); break;
+            case RsvpWords.JR_MENU:    title = getString(R.string.txt_menu); break;
             }
-            else if (part.type == RsvpWords.JR_INTRO) {
-                sb.setSpan(new StyleSpan(Typeface.ITALIC), beg, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            if (title != null) {
+                title += ": ";
+                int beg = sb.length();
+                int end = beg + title.length();
+                sb.setSpan(new StyleSpan(android.graphics.Typeface.BOLD), beg, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
-            sb.append('\n').append('\n');
+            sb.append(part.text.replace('\n',' '));
+            sb.append('\n');
         }
         tvText.setText(sb);
-        if (mRsvpService != null) {
-            try {
-                SpannableStringBuilder sb2 = new SpannableStringBuilder(sb);
-                mRsvpService.post("play", null, sb2.toString());
-            } catch (RemoteException e) {
-                Log.e(TAG, "Error sending a message to RsvpService", e);
-            }
-        }
+        requestPlay(sb.toString());
     }
 
     protected void stopVoice() {
@@ -725,7 +702,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             introSetShown(ds, true);
 
         tvText.setText("");
-        rvChildren.setAdapter(null);
         stopVoice();
         RsvpWords words = new RsvpWords();
         words.addTitleWords(ds.title);
@@ -739,9 +715,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         else if (ds.descr == null && ds.hasArticle) {
             words.addArticleWords(ds.entity);
             playVoice(ds.entity);
-        }
-        if (ds.children != null) {
-            rvChildren.setAdapter(new SSectAdapter(ds.children));
         }
         words.addValueWords(ds);
         playValueVoice(ds);
@@ -793,10 +766,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (action == null)
             return;
         if (action.children != null && action.children.length > 0) {
-            final ArrayAdapter<SSect> adapter = new ArrayAdapter<>(MainActivity.this,
+            final ArrayAdapter<SSect> adapter = new ArrayAdapter<>(RsvpActivity.this,
                     android.R.layout.select_dialog_singlechoice,
                     action.children);
-            new AlertDialog.Builder(MainActivity.this)
+            new AlertDialog.Builder(RsvpActivity.this)
                     .setTitle("UpStart Guide")
                     .setNegativeButton(R.string.txt_cancel, new DialogInterface.OnClickListener() {
                         @Override
@@ -880,62 +853,4 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             }
         });
     }
-
-
-    static class SSectAdapter extends RecyclerView.Adapter<SSectAdapter.ViewHolder> {
-        private SSect[] mSects;
-
-        // Provide a reference to the views for each data item
-        // Complex data items may need more than one view per item, and
-        // you provide access to all the views for a data item in a view holder
-        static class ViewHolder extends RecyclerView.ViewHolder {
-            // each data item is just a string in this case
-            public TextView tvTitle;
-            public TextView tvIntro;
-            public ViewHolder(View v) {
-                super(v);
-                tvTitle = (TextView) v.findViewById(R.id.tv_title);
-                tvIntro = (TextView) v.findViewById(R.id.tv_intro);
-            }
-        }
-
-        // Provide a suitable constructor (depends on the kind of dataset)
-        public SSectAdapter(SSect[] sections) {
-            mSects = sections;
-        }
-
-        // Create new views (invoked by the layout manager)
-        @Override
-        public SSectAdapter.ViewHolder onCreateViewHolder(ViewGroup parent, int viewType) {
-            // create a new view
-            View v = LayoutInflater.from(parent.getContext())
-                    .inflate(R.layout.list_child, parent, false);
-            ViewHolder vh = new ViewHolder(v);
-            return vh;
-        }
-
-        // Replace the contents of a view (invoked by the layout manager)
-        @Override
-        public void onBindViewHolder(ViewHolder holder, int position) {
-            String title = "";
-            String descr = "";
-            if (position >= 0 && position < mSects.length) {
-                SSect sect = mSects[position];
-                if (sect.title != null)
-                    title = sect.title.data;
-                if (sect.descr != null)
-                    descr = sect.descr.data;
-            }
-            holder.tvTitle.setText(title);
-            holder.tvIntro.setText(descr);
-
-        }
-
-        // Return the size of your dataset (invoked by the layout manager)
-        @Override
-        public int getItemCount() {
-            return mSects.length;
-        }
-    }
-
 }

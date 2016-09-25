@@ -6,34 +6,39 @@ import android.util.Log;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.WearableListenerService;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.nio.charset.Charset;
 
 public class RsvpMessageService extends WearableListenerService {
 
     public static final String TAG = "SkinterWatch";
 
-    public static final String RSVP_PLAY_MESSAGE_PATH = "/rsvp_demo/play";
-    public static final String RSVP_STOP_MESSAGE_PATH = "/rsvp_demo/stop";
+    public static final String RSVP_MESSAGE_PATH = "/rsvp_demo";
 
     private static final Charset utf8 = Charset.forName("UTF-8");
 
     @Override
     public void onMessageReceived(MessageEvent msg) {
         Log.i(TAG, "received message from node: "+msg.getSourceNodeId()+", path: "+msg.getPath());
-        if (msg.getPath().equals(RSVP_PLAY_MESSAGE_PATH)) {
-            String text = new String(msg.getData(), utf8);
-            Log.i(TAG, "request to play: "+text);
+        if (msg.getPath().equals(RSVP_MESSAGE_PATH)) {
+            if (msg.getData() == null)
+                return;
+            String json = new String(msg.getData(), utf8);
+            Log.i(TAG, "request: "+json);
+            String text = "";
+            try {
+                JSONObject jobj = new JSONObject(json);
+                if ("play".equals(jobj.optString("action"))) {
+                    text = jobj.optString("text", "");
+                }
+            } catch (JSONException e) {
+                e.printStackTrace();
+            }
             Intent startIntent = new Intent(this, MainActivity.class);
             startIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startIntent.putExtra("RSVP_DATA", text);
-            startActivity(startIntent);
-            return;
-        }
-        if (msg.getPath().equals(RSVP_STOP_MESSAGE_PATH)) {
-            Log.i(TAG, "request to stop");
-            Intent startIntent = new Intent(this, MainActivity.class);
-            startIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startIntent.putExtra("RSVP_DATA", "");
             startActivity(startIntent);
             return;
         }

@@ -27,6 +27,8 @@ public final class RsvpWords {
     public static final int JR_VALUE   = 8;
     // Just-read Warning
     public static final int JR_WARNING = 16;
+    // Just-read Menu
+    public static final int JR_MENU    = 32;
 
     public static class Word {
         final char icon;
@@ -40,10 +42,10 @@ public final class RsvpWords {
     }
 
     public static class Part {
-        final String title;
+        final int type;
         final String text;
-        public Part(String title, String word) {
-            this.title = title;
+        public Part(int type, String word) {
+            this.type = type;
             this.text = word;
         }
     }
@@ -80,23 +82,20 @@ public final class RsvpWords {
         return this;
     }
     public RsvpWords addTitleWords(SEntity entity) {
-        justRead |= JR_TITLE;
-        return addWords("Title", '§', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
+        return addWords(JR_TITLE, '§', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addIntroWords(SEntity entity) {
-        justRead |= JR_INTRO;
-        return addWords("Intro", '¶', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
+        return addWords(JR_INTRO, '¶', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addArticleWords(SEntity entity) {
-        justRead |= JR_ARTICLE;
-        return addWords("Article", '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
+        return addWords(JR_ARTICLE, '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addMenuWords(int idx, SEntity entity) {
-        return addWords("Menu "+Integer.toString(1+idx), (char)('1'+idx), entity == null ? "***" : entity.data, 3*DEFAULT_WEIGHT);
+        return addWords(JR_MENU, (char)('1'+idx), entity == null ? "***" : entity.data, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addWarning(String text) {
         justRead |= JR_WARNING;
-        return addWords("Warning", '⚠', text, 3*DEFAULT_WEIGHT);
+        return addWords(JR_WARNING, '⚠', text, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addValueWords(SSect sect) {
         if (sect == null || !sect.isValue)
@@ -115,19 +114,20 @@ public final class RsvpWords {
         String val = makeValueText(entity);
         if (val != null) {
             if (val.isEmpty()) {
-                addWords("Value", ch, "∅", 3*DEFAULT_WEIGHT);
+                addWords(JR_VALUE, ch, "∅", 3*DEFAULT_WEIGHT);
             } else {
-                addWords("Value", ch, val, 3*DEFAULT_WEIGHT);
+                addWords(JR_VALUE, ch, val, 3*DEFAULT_WEIGHT);
             }
         }
         return this;
     }
-    private RsvpWords addWords(String title, char icon, String text, int minWeight) {
+    private RsvpWords addWords(int jr, char icon, String text, int minWeight) {
+        justRead |= jr;
         if (text == null)
             text = "";
         else
             text = text.trim();
-        parts.add(new Part(title, text));
+        parts.add(new Part(jr, text));
         if (text.isEmpty()) {
             words.add(new Word(icon, "∅", minWeight));
         } else {

@@ -3,17 +3,26 @@
       xmlns:android="http://schemas.android.com/apk/res/android">
 
     <group android:checkableBehavior="single" android:id="@+id/grp1">
+        <item android:title="Hello Watch Rsvp"
+            android:checkable="false"
+            android:id="@+id/rsvp_hello"/>
         <item android:title="Stop Watch Rsvp"
             android:checkable="false"
-            android:id="@+id/stop"/>
+            android:id="@+id/rsvp_stop"/>
         <item android:title="Notify Watch"
             android:checkable="false"
-            android:id="@+id/notify"/>
+            android:id="@+id/rsvp_notify"/>
+        <item android:title="Peekabu connect"
+              android:checkable="false"
+              android:id="@+id/chat_connect"/>
+        <item android:title="Peekabu disconnect"
+              android:checkable="false"
+              android:id="@+id/chat_disconnect"/>
     </group>
     <group android:checkableBehavior="single" android:id="@+id/grp2">
         <item android:title="Hello UpStars"
             android:checkable="false"
-            android:id="@+id/hello"
+            android:id="@+id/sf_hello"
             />
         <item android:title="UpStars: Look Around"
             android:checkable="false"

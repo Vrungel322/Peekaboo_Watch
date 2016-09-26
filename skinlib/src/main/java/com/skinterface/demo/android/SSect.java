@@ -32,7 +32,7 @@ class SSect {
     }
 
     static SSect fromJson(String json) {
-        if (json == null)
+        if (json == null || json.length() == 0)
             return null;
         JSONTokener tokener = new JSONTokener(json);
         Object obj = null;

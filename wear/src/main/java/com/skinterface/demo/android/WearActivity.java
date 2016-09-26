@@ -3,35 +3,25 @@ package com.skinterface.demo.android;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.wearable.activity.WearableActivity;
-import android.support.wearable.view.BoxInsetLayout;
-import android.util.Log;
+import android.support.wearable.view.GridViewPager;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.TextView;
-
-import com.google.android.gms.common.ConnectionResult;
-import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.wearable.Wearable;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
 
-public class MainActivity extends WearableActivity
-        implements GoogleApiClient.ConnectionCallbacks, GoogleApiClient.OnConnectionFailedListener
+public class WearActivity extends WearableActivity implements View.OnClickListener
 {
-
     public static final String TAG = "SkinterWatch";
 
     private static final SimpleDateFormat AMBIENT_DATE_FORMAT =
             new SimpleDateFormat("HH:mm", Locale.US);
 
-    private BoxInsetLayout mContainerView;
-    private RsvpView mRsvpView;
+    private ViewGroup mContainerView;
     private TextView mTextView;
     private TextView mClockView;
-
-    GoogleApiClient mGoogleApiClient;
-    private boolean connected;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -39,18 +29,41 @@ public class MainActivity extends WearableActivity
         setContentView(R.layout.activity_main);
         setAmbientEnabled();
 
-        mContainerView = (BoxInsetLayout) findViewById(R.id.container);
-        mRsvpView = (RsvpView) findViewById(R.id.rsvp);
+        mContainerView = (ViewGroup) findViewById(R.id.container);
         mTextView = (TextView) findViewById(R.id.text);
         mClockView = (TextView) findViewById(R.id.clock);
 
-        mGoogleApiClient = new GoogleApiClient.Builder(this)
-                .addConnectionCallbacks(this)
-                .addOnConnectionFailedListener(this)
-                // Request access only to the Wearable API
-                .addApiIfAvailable(Wearable.API)
-                .build();
+        mTextView.setOnClickListener(this);
+        mClockView.setOnClickListener(this);
+
+        getFragmentManager().beginTransaction()
+                .add(android.R.id.content, new RsvpFragment(), "rsvp")
+                .commit();
+
         onNewIntent(getIntent());
+    }
+
+    public void startCardsActivity() {
+        Intent intent = new Intent(this, CardsActivity.class);
+        startActivity(intent);
+    }
+
+    public RsvpFragment getRsvpFragment() {
+        return (RsvpFragment)getFragmentManager().findFragmentByTag("rsvp");
+    }
+
+    public void playCurrentSect() {
+        if (SectionsModel.instance.size() <= 0)
+            return;
+        SSect sect = SectionsModel.instance.last();
+        RsvpFragment fr = getRsvpFragment();
+        if (fr != null)
+            fr.play(sect);
+    }
+    public void stopCurrentSect() {
+        RsvpFragment fr = getRsvpFragment();
+        if (fr != null)
+            fr.stop();
     }
 
     @Override
@@ -58,20 +71,20 @@ public class MainActivity extends WearableActivity
         super.onNewIntent(intent);
         setIntent(intent);
 
-        if (intent.hasExtra("RSVP_DATA")) {
-            SEntity entity = new SEntity();
-            entity.data = intent.getStringExtra("RSVP_DATA");
-            if (entity.data == null || entity.data.length() == 0) {
-                RsvpWords words = new RsvpWords();
-                mRsvpView.play(words);
-            } else {
-                RsvpWords words = new RsvpWords();
-                words.addTitleWords(entity);
-                mRsvpView.play(words);
+        if (intent.hasExtra("RSVP_SECT")) {
+            SSect sect = SSect.fromJson(intent.getStringExtra("RSVP_SECT"));
+            if (sect != null) {
+                SectionsModel.instance.addSection(sect);
+                playCurrentSect();
             }
         } else {
-            SEntity entity = new SEntity();
-            entity.data =
+            SSect sect = new SSect();
+            sect.title = new SEntity();
+            sect.title.media = "text";
+            sect.title.data = "9th Day";
+            sect.hasArticle = true;
+            sect.entity.media = "text";
+            sect.entity.data =
                     "      Best action: attention. The hardest day of the Moon cycle. Best you can do on\n" +
                             "      the day is carrying the trash out, mend holes and don’t get into anything.\n" +
                             "      The day is not purposed for divination. The dark movement of Hecate favors\n" +
@@ -87,16 +100,28 @@ public class MainActivity extends WearableActivity
                             "      modern epoch somewhat correct this information. They would rather themselves\n" +
                             "      with all the work, even at the expense of their health, just to prove they\n" +
                             "      are right and independent.\n";
-            RsvpWords words = new RsvpWords();
-            words.addTitleWords(entity);
-            mRsvpView.play(words);
+            SectionsModel.instance.addSection(sect);
+            playCurrentSect();
         }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        playCurrentSect();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        stopCurrentSect();
     }
 
     @Override
     public void onEnterAmbient(Bundle ambientDetails) {
         super.onEnterAmbient(ambientDetails);
         updateDisplay();
+        stopCurrentSect();
     }
 
     @Override
@@ -126,20 +151,11 @@ public class MainActivity extends WearableActivity
     }
 
     @Override
-    public void onConnected(Bundle connectionHint) {
-        Log.d(TAG, "onConnected: " + connectionHint);
-        // Now you can use the Data Layer API
-        connected = true;
+    public void onClick(View v) {
+        int id = v.getId();
+        if (id == R.id.text || id == R.id.clock || id == R.id.pager) {
+            startCardsActivity();
+            return;
+        }
     }
-    @Override
-    public void onConnectionSuspended(int cause) {
-        Log.d(TAG, "onConnectionSuspended: " + cause);
-        connected = false;
-    }
-    @Override
-    public void onConnectionFailed(ConnectionResult result) {
-        Log.d(TAG, "onConnectionFailed: " + result);
-        connected = false;
-    }
-
 }

@@ -6,9 +6,6 @@ import android.util.Log;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.WearableListenerService;
 
-import org.json.JSONException;
-import org.json.JSONObject;
-
 import java.nio.charset.Charset;
 
 public class RsvpMessageService extends WearableListenerService {
@@ -27,19 +24,13 @@ public class RsvpMessageService extends WearableListenerService {
                 return;
             String json = new String(msg.getData(), utf8);
             Log.i(TAG, "request: "+json);
-            String text = "";
-            try {
-                JSONObject jobj = new JSONObject(json);
-                if ("play".equals(jobj.optString("action"))) {
-                    text = jobj.optString("text", "");
-                }
-            } catch (JSONException e) {
-                e.printStackTrace();
+            SSect sect = SSect.fromJson(json);
+            if (sect != null) {
+                Intent startIntent = new Intent(this, WearActivity.class);
+                startIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                startIntent.putExtra("RSVP_SECT", json);
+                startActivity(startIntent);
             }
-            Intent startIntent = new Intent(this, MainActivity.class);
-            startIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startIntent.putExtra("RSVP_DATA", text);
-            startActivity(startIntent);
             return;
         }
         super.onMessageReceived(msg);

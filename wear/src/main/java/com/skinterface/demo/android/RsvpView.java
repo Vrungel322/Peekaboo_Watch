@@ -4,6 +4,9 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
+import android.graphics.Typeface;
+import android.os.Handler;
+import android.os.Message;
 import android.util.AttributeSet;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -15,10 +18,36 @@ import java.util.concurrent.TimeUnit;
 
 public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
 
+    public interface RsvpViewListener {
+        void onRsvpPlayStart();
+        void onRsvpPlayStop();
+    }
+
+    static final int MSG_PLAY_STARTED  = 1;
+    static final int MSG_PLAY_FINISHED = 2;
+
+    Handler handler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            RsvpViewListener l = listener;
+            switch (msg.what) {
+            case MSG_PLAY_STARTED:
+                if (l != null)
+                    l.onRsvpPlayStart();
+                break;
+            case MSG_PLAY_FINISHED:
+                if (l != null)
+                    l.onRsvpPlayStop();
+                break;
+            }
+        }
+    };
+
     private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     private ScheduledFuture<?> future;
     private SurfaceHolder surfaceHolder;
     private Paint paint = new Paint();
+    private RsvpViewListener listener;
 
     static final int BLACK = 0xFF222222;
     static final int GRAY = 0xFFAAAAAA;
@@ -26,7 +55,7 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
     static final int WHITE = 0xFFEEEEEE;
     int CANVAS_W = 480;
     int CANVAS_H = 160;
-    int PIVOT_X = 160;
+    int PIVOT_X = 180;
     int PIVOT_H = 24;
     int LINE_HW = 6;
     int TEXT_SZ = 56;
@@ -45,6 +74,14 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
     public RsvpView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
         getHolder().addCallback(this);
+    }
+
+    public RsvpViewListener getListener() {
+        return listener;
+    }
+
+    public void setListener(RsvpViewListener listener) {
+        this.listener = listener;
     }
 
     @Override
@@ -113,43 +150,46 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
                 RsvpWords.Word w = words.get(wordsPosition);
                 pauseCount = w.weight;
                 int length = w.word.length();
+                for (int p=length-1; p > 0; --p) {
+                    char ch = w.word.charAt(p);
+                    if (ch == '.' || ch == ',' || ch == ';' || ch == ':' || ch == '-')
+                        length -= 1;
+                    else
+                        break;
+                }
                 int bestLetter = 4;
-                boolean half = true;
                 switch (length) {
-                    case 0:
-                    case 1:
-                    case 2:
-                        bestLetter = 1; // first
-                        break;
-                    case 3:
-                        half = false;
-                    case 4:
-                    case 5:
-                    case 6:
-                        bestLetter = 2; // second
-                        break;
-                    case 7:
-                        half = false;
-                    case 8:
-                    case 9:
-                    case 10:
-                    case 11:
-                    case 12:
-                        bestLetter = 3; // third
-                        break;
+                case 0:
+                    bestLetter = 0; // first
+                    break;
+                case 1:
+                    bestLetter = 1; // first
+                    break;
+                case 2:
+                case 3:
+                case 4:
+                case 5:
+                    bestLetter = 2; // second
+                    break;
+                case 6:
+                case 7:
+                case 8:
+                case 9:
+                    bestLetter = 3; // third
+                    break;
                 }
 
                 paint.setColor(WHITE);
                 paint.setStyle(Paint.Style.FILL);
                 paint.setTextSize(TEXT_SZ);
+                paint.setTypeface(Typeface.MONOSPACE);
                 paint.setStrokeWidth(0);
                 float offs = 0;
                 if (bestLetter > 0) {
                     paint.getTextWidths(w.word, 0, bestLetter, width);
                     for (int i=0; i < bestLetter-1; ++i)
                         offs += width[i];
-                    if (half)
-                        offs += width[bestLetter-1] / 2;
+                    offs += width[bestLetter-1] / 2;
                 }
                 c2d.drawText(w.word, PIVOT_X-offs, TEXT_Y, paint);
                 if (w.icon != 0 && w.icon != ' ')
@@ -171,6 +211,7 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
         sf = executor.scheduleAtFixedRate(player, 100, 35, TimeUnit.MILLISECONDS);
         player.future = sf;
         future = sf;
+        handler.sendEmptyMessage(MSG_PLAY_STARTED);
     }
 
     void stop(ScheduledFuture<?> sf) {
@@ -183,5 +224,6 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
         setKeepScreenOn(false);
         if (sf == future)
             future = null;
+        handler.sendEmptyMessage(MSG_PLAY_FINISHED);
     }
 }

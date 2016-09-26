@@ -145,6 +145,8 @@ public final class RsvpWords {
         return this;
     }
     private int addWeight(String word) {
+        if (word.length() == 0)
+            return 0;
         int weight = 0;
         char end = word.charAt(word.length() - 1);
         if (word.length() >= 10) {
@@ -159,7 +161,7 @@ public final class RsvpWords {
                 case '!':
                 case '?':
                 case ';':
-                    weight += 4; break;
+                    weight += 2; break;
             }
         } else {
             switch (end) {
@@ -170,7 +172,7 @@ public final class RsvpWords {
                 case '!':
                 case '?':
                 case ';':
-                    weight += 6; break;
+                    weight += 4; break;
             }
         }
         if (weight == 0 && word.indexOf(WORD_JOINER) > 0)
@@ -220,8 +222,18 @@ public final class RsvpWords {
         ArrayList<String> list = new ArrayList<>();
         list.addAll(Arrays.asList(text.split("\\s+")));
         // join or short words
-        for (int i=0; i < list.size()-1; ++i) {
+        for (int i=0; i < list.size(); ++i) {
             String w0 = list.get(i);
+            if (w0.length() == 0)
+                continue;
+            switch (w0.charAt(w0.length()-1)) {
+            case '.':case '!':case '?':
+                list.add(i+1,"");
+                list.add(i+2,"");
+                continue;
+            }
+            if (i == list.size()-1)
+                continue;
             String w1 = list.get(i+1);
             if (w0.length() == 1 && w1.length() <= 5) {
                 list.set(i, w0 + WORD_JOINER + w1);

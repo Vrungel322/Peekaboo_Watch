@@ -81,25 +81,44 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
             SSect sect = new SSect();
             sect.title = new SEntity();
             sect.title.media = "text";
-            sect.title.data = "9th Day";
+            sect.title.data = "Сайт UpStars";
+            sect.descr = new SEntity();
+            sect.descr.media = "text";
+            sect.descr.data = "Вы находитесь в большом, просторном, круглом зале сайта UpStars. " +
+                    "На высоком сводчатом потолке изображено звёздное небо с рисунками созвездий. " +
+                    "На стенах зала изображены Знаки Зодиака и Планеты в виде древних богов в " +
+                    "декорациях астрологических Домов. На изображениях видны поясняющие надписи.";
             sect.hasArticle = true;
             sect.entity.media = "text";
-            sect.entity.data =
-                    "      Best action: attention. The hardest day of the Moon cycle. Best you can do on\n" +
-                            "      the day is carrying the trash out, mend holes and don’t get into anything.\n" +
-                            "      The day is not purposed for divination. The dark movement of Hecate favors\n" +
-                            "      leaving, end of useless connections, cutting tails, bad habits. Good for a\n" +
-                            "      submission, penance, summing up month results.\n" +
-                            "\n" +
-                            "      Anatomical match: hands and feet. Keep them safe on the day. Manicure and\n" +
-                            "      pedicure done on the day will not stay long.\n" +
-                            "\n" +
-                            "      People born on the day are long-livers, though sickly, constantly fighting\n" +
-                            "      against something, looking for something. Traditional astrology they are\n" +
-                            "      considered to be scapegoats for the whole Zodiac, but the practice and\n" +
-                            "      modern epoch somewhat correct this information. They would rather themselves\n" +
-                            "      with all the work, even at the expense of their health, just to prove they\n" +
-                            "      are right and independent.\n";
+            sect.entity.data = "Рядом с вами оказалась дежурная звёздочка-Гид. Вы можете обращаться " +
+                    "к ней за помощью для быстрого перемещения по этому сайту, или за пояснениями " +
+                    "по поводу астрологических терминов." +
+                    "\n" +
+                    "Недалеко от вас находится стенд с информацией для посетителей сайта, а левее " +
+                    "расположен вход в канцелярию, через которую вы сможете связаться с администрацией " +
+                    "сайта или заказать составление индивидуального гороскопа.";
+            SSect child0 = new SSect();
+            child0.title = new SEntity();
+            child0.title.media = "text";
+            child0.title.data = "О Планетах";
+            child0.descr = new SEntity();
+            child0.descr.media = "text";
+            child0.descr.data = "О Планетах";
+            SSect child1 = new SSect();
+            child1.title = new SEntity();
+            child1.title.media = "text";
+            child1.title.data = "Солнце";
+            child1.descr = new SEntity();
+            child1.descr.media = "text";
+            child1.descr.data = "Солнце в астрологии - центральная фигура, квинтэссенция гороскопа.";
+            SSect child2 = new SSect();
+            child2.title = new SEntity();
+            child2.title.media = "text";
+            child2.title.data = "Луна";
+            child2.descr = new SEntity();
+            child2.descr.media = "text";
+            child2.descr.data = "Вторая по степени важности фигура - Луна - в астрологии связана с воспринимающим началом в человеке.";
+            sect.children = new SSect[]{child0, child1, child2};
             SectionsModel.instance.addSection(sect);
             playCurrentSect();
         }

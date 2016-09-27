@@ -183,20 +183,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
         if (id == R.id.rsvp_hello) {
             if (mRsvpService != null) {
-                try {
-                    SSect sect = new SSect();
-                    sect.title.media = "text";
-                    sect.title.data = "Hello from handheld!";
-                    sect.hasArticle = true;
-                    sect.entity.media = "text";
-                    sect.entity.data = "With the help of our site you can know the details and the underlying " +
-                            "reasons for relations with any person - a partner, a new sympathy, " +
-                            "an old friend, your child, and check the compatibility of the child " +
-                            "and the nanny, colleagues in the work group and so long, and so forth.";
-                    mRsvpService.post("play", null, sect.toString());
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Error sending a message to RsvpService", e);
-                }
+                SSect sect = new SSect();
+                sect.title.media = "text";
+                sect.title.data = "Hello from handheld!";
+                sect.hasArticle = true;
+                sect.entity.media = "text";
+                sect.entity.data = "With the help of our site you can know the details and the underlying " +
+                        "reasons for relations with any person - a partner, a new sympathy, " +
+                        "an old friend, your child, and check the compatibility of the child " +
+                        "and the nanny, colleagues in the work group and so long, and so forth.";
+                postRsvpService(sect);
             }
             return true;
         }
@@ -634,7 +630,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (mRsvpService == null)
             return;
         try {
-            mRsvpService.post("play", null, sect.toString());
+            if (sect != null)
+                mRsvpService.post("play", null, sect.fillJson(new JSONObject()).toString());
         } catch (RemoteException e) {
             Log.e(TAG, "Error sending a message to RsvpService", e);
         }
@@ -666,23 +663,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             sb.append('\n').append('\n');
         }
         tvText.setText(sb);
-        if (mRsvpService != null) {
-            try {
-                SSect sect = new SSect();
-                sect.title.media = "text";
-                sect.title.data = "Hello from handheld!";
-                sect.hasArticle = true;
-                sect.entity.media = "text";
-                sect.entity.data = "With the help of our site you can know the details and the underlying " +
-                        "reasons for relations with any person - a partner, a new sympathy, " +
-                        "an old friend, your child, and check the compatibility of the child " +
-                        "and the nanny, colleagues in the work group and so long, and so forth.";
-                SpannableStringBuilder sb2 = new SpannableStringBuilder(sb);
-                mRsvpService.post("play", null, sb2.toString());
-            } catch (RemoteException e) {
-                Log.e(TAG, "Error sending a message to RsvpService", e);
-            }
-        }
     }
 
     protected void stopVoice() {

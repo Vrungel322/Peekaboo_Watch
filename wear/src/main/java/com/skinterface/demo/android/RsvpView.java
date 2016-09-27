@@ -8,6 +8,7 @@ import android.graphics.Typeface;
 import android.os.Handler;
 import android.os.Message;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
@@ -43,7 +44,7 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
         }
     };
 
-    private final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+    private static final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     private ScheduledFuture<?> future;
     private SurfaceHolder surfaceHolder;
     private Paint paint = new Paint();
@@ -118,7 +119,8 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
             SurfaceHolder holder = surfaceHolder;
             Canvas c2d = null;
             try {
-                if (--pauseCount > 0)
+                //Log.d("rsvp", "play step, pauseCount:"+pauseCount+", wordsPosition:"+wordsPosition);
+                if (--pauseCount > 0 || (future != null && future.isCancelled()))
                     return;
 
                 if (holder != null)
@@ -143,12 +145,17 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
                 wordsPosition += 1;
                 if (wordsPosition < 0)
                     return;
+                if (wordsPosition == 0) {
+                    handler.sendEmptyMessage(MSG_PLAY_STARTED);
+                }
                 if (wordsPosition >= length) {
+                    //Log.d("rsvp", "play finished with length:"+length);
                     stop(future);
                     return;
                 }
                 RsvpWords.Word w = words.get(wordsPosition);
                 pauseCount = w.weight;
+                //Log.d("rsvp", "play word:'"+w.word+"', pause:"+pauseCount);
                 int length = w.word.length();
                 for (int p=length-1; p > 0; --p) {
                     char ch = w.word.charAt(p);
@@ -208,10 +215,9 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
             sf.cancel(false);
         setKeepScreenOn(true);
         RsvpPlayer player = new RsvpPlayer(words);
-        sf = executor.scheduleAtFixedRate(player, 100, 35, TimeUnit.MILLISECONDS);
+        sf = executor.scheduleAtFixedRate(player, 100, 25, TimeUnit.MILLISECONDS);
         player.future = sf;
         future = sf;
-        handler.sendEmptyMessage(MSG_PLAY_STARTED);
     }
 
     void stop(ScheduledFuture<?> sf) {
@@ -221,9 +227,10 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
                 return;
         }
         sf.cancel(false);
-        setKeepScreenOn(false);
-        if (sf == future)
+        if (sf == future) {
+            setKeepScreenOn(false);
             future = null;
+        }
         handler.sendEmptyMessage(MSG_PLAY_FINISHED);
     }
 }

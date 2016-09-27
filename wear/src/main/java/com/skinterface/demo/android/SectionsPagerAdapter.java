@@ -2,9 +2,10 @@ package com.skinterface.demo.android;
 
 import android.app.Fragment;
 import android.app.FragmentManager;
+import android.database.DataSetObserver;
 import android.os.Bundle;
 import android.support.wearable.view.CardFragment;
-import android.support.wearable.view.CardFrame;
+import android.support.wearable.view.CardScrollView;
 import android.support.wearable.view.FragmentGridPagerAdapter;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -18,7 +19,20 @@ public class SectionsPagerAdapter extends FragmentGridPagerAdapter implements Se
     public SectionsPagerAdapter(FragmentManager fm, SectionsModel model) {
         super(fm);
         this.model = model;
-        this.model.addSectionsListener(this);
+    }
+
+    @Override
+    public void registerDataSetObserver(DataSetObserver observer) {
+        super.registerDataSetObserver(observer);
+        if (observer != null)
+            this.model.addSectionsListener(this);
+    }
+
+    @Override
+    public void unregisterDataSetObserver(DataSetObserver observer) {
+        super.unregisterDataSetObserver(observer);
+        if (observer != null)
+            this.model.removeSectionsListener(this);
     }
 
     @Override

@@ -86,11 +86,11 @@ public class RsvpService extends Service implements
         @Override
         public String post(String action, Map params, String data) throws RemoteException {
             if ("play".equals(action)) {
-                requestPlay(data);
+                requestPlay(SSect.fromJson(data));
                 return "true";
             }
             else if ("stop".equals(action)) {
-                requestPlay(null);
+                requestPlay((String)null);
                 return "true";
             }
             else if ("chat-connect".equals(action)) {
@@ -214,6 +214,19 @@ public class RsvpService extends Service implements
             json.put("action", "play");
             if (text != null)
                 json.put("text", text);
+        } catch (JSONException e) {}
+        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, json.toString().getBytes(utf8));
+    }
+
+    final void requestPlay(SSect sect) {
+        String nodeId = pickBestNodeId();
+        if (nodeId == null)
+            return;
+        JSONObject json = new JSONObject();
+        try {
+            json.put("action", "play");
+            if (sect != null)
+                sect.fillJson(json);
         } catch (JSONException e) {}
         Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, json.toString().getBytes(utf8));
     }

@@ -2,11 +2,15 @@ package com.skinterface.demo.android;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.support.wearable.activity.WearableActivity;
 import android.support.wearable.view.GridViewPager;
 import android.support.wearable.view.WatchViewStub;
+import android.view.View;
 import android.widget.TextView;
 
-public class CardsActivity extends Activity {
+import java.util.Date;
+
+public class CardsActivity extends WearableActivity {
 
     public static final String TAG = "SkinterWatch";
 
@@ -24,11 +28,18 @@ public class CardsActivity extends Activity {
             @Override
             public void onLayoutInflated(WatchViewStub stub) {
                 mTextView = (TextView) stub.findViewById(R.id.text);
-                mTextView = (TextView) stub.findViewById(R.id.clock);
+                mClockView = (TextView) stub.findViewById(R.id.clock);
                 mPager = (GridViewPager) findViewById(R.id.pager);
                 mPagerAdapter = new SectionsPagerAdapter(getFragmentManager(), SectionsModel.instance);
                 mPager.setAdapter(mPagerAdapter);
             }
         });
     }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        SectionsModel.instance.removeSectionsListener(mPagerAdapter);
+    }
+
 }

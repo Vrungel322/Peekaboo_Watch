@@ -25,14 +25,32 @@
             android:layout_height="48dp"
             app:imageScaleMode="center"
             android:src="@drawable/ic_view_module_black_48dp"
+            android:visibility="gone"
             />
-        <android.support.wearable.view.CircularButton
-            android:id="@+id/next"
+        <FrameLayout
             android:layout_width="48dp"
-            android:layout_height="48dp"
-            app:imageScaleMode="center"
-            android:src="@drawable/ic_forward_black_48dp"
-            />
+            android:layout_height="48dp">
+            <android.support.wearable.view.CircularButton
+                android:id="@+id/next"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                app:imageScaleMode="center"
+                android:src="@drawable/ic_forward_black_48dp"
+                />
+            <TextView
+                android:id="@+id/next_text"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center"
+                android:text="10"
+                android:textSize="16sp"
+                android:textColor="@color/white"
+                android:shadowColor="@color/green"
+                android:shadowRadius="6"
+                android:shadowDx="2"
+                android:shadowDy="2"
+                />
+        </FrameLayout>
     </LinearLayout>
 
 </FrameLayout>

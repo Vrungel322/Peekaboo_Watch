@@ -7,6 +7,7 @@
         android:required="true"/>
 
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
 
     <application
         android:allowBackup="true"
@@ -41,7 +42,6 @@
         <service android:name=".RsvpMessageService">
             <intent-filter>
                 <action android:name="com.google.android.gms.wearable.MESSAGE_RECEIVED"/>
-
                 <data
                     android:host="*"
                     android:path="/rsvp_demo"

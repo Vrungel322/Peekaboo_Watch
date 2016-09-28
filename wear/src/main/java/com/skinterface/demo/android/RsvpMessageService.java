@@ -1,12 +1,21 @@
 package com.skinterface.demo.android;
 
 import android.content.Intent;
+import android.os.Bundle;
 import android.util.Log;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.wearable.MessageEvent;
+import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
 
 import java.nio.charset.Charset;
+import java.util.Map;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentSkipListMap;
 
 public class RsvpMessageService extends WearableListenerService {
 
@@ -35,4 +44,5 @@ public class RsvpMessageService extends WearableListenerService {
         }
         super.onMessageReceived(msg);
     }
+
 }

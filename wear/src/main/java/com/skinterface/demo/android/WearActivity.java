@@ -2,19 +2,37 @@ package com.skinterface.demo.android;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
 import android.support.wearable.activity.WearableActivity;
-import android.support.wearable.view.GridViewPager;
+import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import com.google.android.gms.common.ConnectionResult;
+import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.ResolvingResultCallbacks;
+import com.google.android.gms.common.api.ResultCallback;
+import com.google.android.gms.common.api.Status;
+import com.google.android.gms.wearable.CapabilityApi;
+import com.google.android.gms.wearable.CapabilityInfo;
+import com.google.android.gms.wearable.Node;
+import com.google.android.gms.wearable.Wearable;
+
+import java.io.BufferedInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.nio.charset.Charset;
 import java.text.SimpleDateFormat;
 import java.util.Date;
 import java.util.Locale;
+import java.util.Set;
 
-public class WearActivity extends WearableActivity implements View.OnClickListener
-{
+public class WearActivity extends WearableActivity implements View.OnClickListener {
     public static final String TAG = "SkinterWatch";
+
+    private static final Charset utf8 = Charset.forName("UTF-8");
 
     private static final SimpleDateFormat AMBIENT_DATE_FORMAT =
             new SimpleDateFormat("HH:mm", Locale.US);
@@ -22,6 +40,9 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     private ViewGroup mContainerView;
     private TextView mTextView;
     private TextView mClockView;
+
+    private Set<Node> mVoiceNodes;
+    private GoogleApiClient mGoogleApiClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -39,6 +60,41 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
         getFragmentManager().beginTransaction()
                 .add(android.R.id.content, new RsvpFragment(), "rsvp")
                 .commit();
+
+        mGoogleApiClient = new GoogleApiClient.Builder(this)
+                .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
+                    @Override
+                    public void onConnected(Bundle connectionHint) {
+                        Log.d(TAG, "onConnected: " + connectionHint);
+                        Wearable.CapabilityApi.getCapability(mGoogleApiClient, "rsvp_voice",
+                                CapabilityApi.FILTER_REACHABLE)
+                                .setResultCallback(new ResultCallback<CapabilityApi.GetCapabilityResult>() {
+                                    @Override
+                                    public void onResult(@NonNull CapabilityApi.GetCapabilityResult getCapabilityResult) {
+                                        mVoiceNodes = getCapabilityResult.getCapability().getNodes();
+                                    }
+                                });
+                    }
+                    @Override
+                    public void onConnectionSuspended(int cause) {
+                        Log.d(TAG, "onConnectionSuspended: " + cause);
+                    }
+                })
+                .addOnConnectionFailedListener(new GoogleApiClient.OnConnectionFailedListener() {
+                    @Override
+                    public void onConnectionFailed(ConnectionResult result) {
+                        Log.d(TAG, "onConnectionFailed: " + result);
+                    }
+                })
+                .addApi(Wearable.API) // Request access only to the Wearable API
+                .build();
+        mGoogleApiClient.connect();
+        Wearable.CapabilityApi.addCapabilityListener(mGoogleApiClient, new CapabilityApi.CapabilityListener() {
+            @Override
+            public void onCapabilityChanged(CapabilityInfo capabilityInfo) {
+                mVoiceNodes = capabilityInfo.getNodes();
+            }
+        }, "rsvp_voice");
 
         onNewIntent(getIntent());
     }
@@ -137,6 +193,20 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     }
 
     @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        mGoogleApiClient.disconnect();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        for (int i=0; i < permissions.length; i++) {
+            Log.i(TAG, "Permissuion request for "+permissions[i]+" result is "+grantResults[i]);
+        }
+    }
+
+    @Override
     public void onEnterAmbient(Bundle ambientDetails) {
         super.onEnterAmbient(ambientDetails);
         updateDisplay();
@@ -177,4 +247,42 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
             return;
         }
     }
+
+    private String pickBestNodeId() {
+        Set<Node> nodes = mVoiceNodes;
+        if (nodes == null)
+            return null;
+        String bestNodeId = null;
+        // Find a nearby node or pick one arbitrarily
+        for (Node node : nodes) {
+            if (node.isNearby())
+                return node.getId();
+            bestNodeId = node.getId();
+        }
+        return bestNodeId;
+    }
+
+    public void sendVoice(String fname) {
+        String nodeId = pickBestNodeId();
+        if (nodeId == null)
+            return;
+        ByteArrayOutputStream bout = new ByteArrayOutputStream();
+        byte[] buffer = new byte[16*1024];
+        FileInputStream in = null;
+        try {
+            in = openFileInput(fname);
+            int read;
+            while ((read = in.read(buffer, 0, buffer.length)) > 0)
+                bout.write(buffer, 0, read);
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to read the sound file into a byte array", e);
+        } finally {
+            try {
+                if (in != null)
+                    in.close();
+            } catch (IOException e) { /* ignore */}
+        }
+        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/voice", bout.toByteArray());
+    }
+
 }

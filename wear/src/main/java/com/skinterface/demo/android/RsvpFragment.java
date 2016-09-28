@@ -1,20 +1,35 @@
 package com.skinterface.demo.android;
 
+import android.Manifest;
+import android.app.Activity;
 import android.app.Fragment;
+import android.media.AudioFormat;
+import android.media.AudioRecord;
+import android.os.Build;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-public class RsvpFragment extends Fragment implements RsvpView.RsvpViewListener, View.OnClickListener {
+import java.io.File;
 
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+import static com.skinterface.demo.android.WearActivity.TAG;
+
+public class RsvpFragment extends Fragment implements
+        RsvpView.RsvpViewListener,
+        View.OnClickListener,
+        View.OnTouchListener,
+        SoundRecorder.OnVoicePlaybackStateChangedListener
+{
     private static final int STATE_INIT    = 0;
     private static final int STATE_DONE    = 1;
     private static final int STATE_TITLE   = 2;
     private static final int STATE_ARTICLE = 3;
     private static final int STATE_CHILD   = 4;
-
 
     RsvpView mRsvpView;
     TextView tvNextText;
@@ -22,11 +37,12 @@ public class RsvpFragment extends Fragment implements RsvpView.RsvpViewListener,
     SSect sect;
     RsvpWords words;
     int state;
+    SoundRecorder recorder;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle saved) {
         View view = inflater.inflate(R.layout.fr_rsvp_round, container, false);
-        view.findViewById(R.id.cards).setOnClickListener(this);
+        view.findViewById(R.id.record).setOnTouchListener(this);
         view.findViewById(R.id.next).setOnClickListener(this);
         tvNextText = (TextView) view.findViewById(R.id.next_text);
         mRsvpView = (RsvpView) view.findViewById(R.id.rsvp);
@@ -146,9 +162,56 @@ public class RsvpFragment extends Fragment implements RsvpView.RsvpViewListener,
         if (v.getId() == R.id.next) {
             onNext();
         }
-        if (v.getId() == R.id.cards) {
-            WearActivity activity = (WearActivity)getActivity();
-            activity.startCardsActivity();
+    }
+
+    @Override
+    public boolean onTouch(View v, MotionEvent event) {
+        if (v.getId() != R.id.record)
+            return false;
+        switch (event.getActionMasked()) {
+        case MotionEvent.ACTION_DOWN:
+            startRecordVoice();
+            break;
+        case MotionEvent.ACTION_UP:
+        case MotionEvent.ACTION_CANCEL:
+            stopRecordVoice();
+            break;
         }
+        return true;
+    }
+
+    private void startRecordVoice() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            int res = getActivity().checkSelfPermission(Manifest.permission.RECORD_AUDIO);
+            if (res != PERMISSION_GRANTED) {
+                getActivity().requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 1);
+                return;
+            }
+        }
+        try {
+            recorder = new SoundRecorder(getActivity(), "voice.raw", this);
+            recorder.startRecording();
+        } catch (Exception e) {
+            Log.e(TAG, "Error on voice recording", e);
+        }
+    }
+    private void stopRecordVoice() {
+        try {
+            recorder.stopRecording();
+        } catch (Exception e) {
+            Log.e(TAG, "Error on voice recording", e);
+        }
+    }
+
+    @Override
+    public void onRecordingStopped() {
+        recorder.startPlay();
+        Activity activity = getActivity();
+        if (activity instanceof WearActivity)
+            ((WearActivity)activity).sendVoice("voice.raw");
+    }
+
+    @Override
+    public void onPlaybackStopped() {
     }
 }

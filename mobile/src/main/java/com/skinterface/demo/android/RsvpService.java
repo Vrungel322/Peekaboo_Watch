@@ -15,6 +15,8 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.CapabilityApi;
 import com.google.android.gms.wearable.CapabilityInfo;
+import com.google.android.gms.wearable.MessageApi;
+import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
 import com.peekaboo.presentation.services.ChatListener;
@@ -27,11 +29,12 @@ import java.nio.charset.Charset;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 public class RsvpService extends Service implements
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener,
-        CapabilityApi.CapabilityListener {
+        CapabilityApi.CapabilityListener, MessageApi.MessageListener {
 
     public static final String TAG = "RsvpService";
 
@@ -157,6 +160,7 @@ public class RsvpService extends Service implements
                 .addApi(Wearable.API) //addApiIfAvailable
                 .build();
         mGoogleApiClient.connect();
+        Wearable.MessageApi.addListener(mGoogleApiClient, this);
     }
 
     @Override
@@ -231,4 +235,22 @@ public class RsvpService extends Service implements
         Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, json.toString().getBytes(utf8));
     }
 
+    @Override
+    public void onMessageReceived(MessageEvent msg) {
+        Log.i(TAG, "received message from node: "+msg.getSourceNodeId()+", path: "+msg.getPath());
+        if ("/voice".equals(msg.getPath())) {
+            if (mChatService != null) {
+                byte[] data = msg.getData();
+                Map<String,String> params = new TreeMap<>();
+                params.put("rate", "22050");
+                params.put("fmt", "PCM16");
+                try {
+                    mChatService.post("voice", params, data);
+                } catch (RemoteException e) {
+                    Log.e(TAG, "Error sending voice", e);
+                }
+            }
+
+        }
+    }
 }

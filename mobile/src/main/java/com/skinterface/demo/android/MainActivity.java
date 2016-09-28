@@ -185,6 +185,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (id == R.id.rsvp_hello) {
             if (mRsvpService != null) {
                 SSect sect = new SSect();
+                sect.title = new SEntity();
                 sect.title.media = "text";
                 sect.title.data = "Hello from handheld!";
                 sect.hasArticle = true;

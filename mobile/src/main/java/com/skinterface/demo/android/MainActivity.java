@@ -61,7 +61,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     final static Charset utf8 = Charset.forName("UTF-8");
 
     static final int CAPS = 0;
-    static final String JSON_URL = "http://192.168.1.100:8888/Service";
+    static final String JSON_URL = "http://192.168.2.157:8080/UpStars/Service";
 
     final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     final Handler handler = new Handler(Looper.getMainLooper());
@@ -119,6 +119,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         rvChildren = (RecyclerView) findViewById(R.id.children);
         rvChildren.setLayoutManager(new LinearLayoutManager(this));
         rvChildren.setHasFixedSize(false);
+        rvChildren.setVisibility(View.GONE);
         grpForward = findViewById(R.id.sf_forward);
         btnForward1 = (ImageButton)findViewById(R.id.sf_forward1);
         btnForward2 = (ImageButton)findViewById(R.id.sf_forward2);
@@ -329,34 +330,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         actionAutoNext = null;
         if (this.currentData != null) {
             SSect ds = this.currentData;
-            SSect theNext = null;
+            SSect theNext = SSect.makeAction("Continue: Guide", "show-menu");
             if (ds.children != null && ds.children.length > 0 && ds.currListPosition >= 0) {
-                SSect aui = ds.children[ds.currListPosition];
-                boolean has_prev = ds.currListPosition > 0;
-                boolean has_next = ds.currListPosition+1 < ds.children.length;
-                if (aui.nextAsSkip) {
-                    //if (has_next)
-                    //    theNext = SSect.makeAction("Continue: Next", "list-next");
-                    //else
-                    //    theNext = SSect.makeAction("Continue: Stop list", "stop");
-                }
-                else if (aui.isAction) {
-                    theNext = SSect.copyAction(aui).prependTitle("Continue: Go to ");
-                }
-                else if (aui.isValue)
-                    theNext = SSect.makeAction("Continue: Edit", "enter").padd("sectID", aui.guid).padd("vname", aui.entity.name);
-                else
-                    theNext = SSect.makeAction("Continue: Enter", "enter").padd("sectID", aui.guid);
-
+                theNext = SSect.makeAction("Continue: Stop list", "stop");
                 currActions.add(SSect.makeAction("Stop list", "stop"));
-                currActions.add(SSect.makeAction("Prev", has_prev ? "list-prev" : "none"));
-                if (aui.isAction)
-                    currActions.add(SSect.copyAction(aui).prependTitle("Go to: "));
-                else if (aui.isValue)
-                    currActions.add(SSect.makeAction("Edit", "enter").padd("sectID", aui.guid).padd("vname", aui.entity.name));
-                else
-                    currActions.add(SSect.makeAction("Enter", "enter").padd("sectID", aui.guid));
-                currActions.add(SSect.makeAction("Next", has_next ? "list-next" : "none"));
             } else {
                 if (ds.returnUp != null && ds.currListPosition < 0) {
                     currActions.add(SSect.makeAction("Return UP", "return-up"));
@@ -381,8 +358,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
                 if (ds.children != null && ds.children.length > 0) {
                     if (!ds.nextAsSkip || ds.returnUp == null)
-                        theNext = SSect.makeAction("Continue: List", "list-first");
-                    currActions.add(SSect.makeAction("List", "list-first"));
+                        theNext = SSect.makeAction("Continue: List", "list");
+                    currActions.add(SSect.makeAction("List", "list"));
                 }
                 if (ds.isValue && ds.children == null) {
                     SSect aui = SSect.copyAction(ds);
@@ -445,12 +422,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 String act = actionAutoNext.entity.data;
                 if ("read".equals(act))
                     btnForward2.setImageResource(R.drawable.ic_format_align_left_black_48dp);
-                else if ("list-first".equals(act))
+                else if ("list".equals(act))
                     btnForward2.setImageResource(R.drawable.ic_format_list_bulleted_black_48dp);
                 else if ("auto-next-up".equals(act))
                     btnForward2.setImageResource(R.drawable.ic_playlist_play_black_48dp);
                 else if ("enter".equals(act))
                     btnForward2.setImageResource(R.drawable.ic_exit_to_app_black_48dp);
+                else if ("show-menu".equals(act))
+                    btnForward2.setImageResource(R.drawable.ic_more_vert_black_48dp);
             }
         }
     }
@@ -463,13 +442,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         public void run() {
             setStatus("");
             String act = action.getAction();
-            if ("list-next".equals(act)) {
-                titleChildAt(currentData.currListPosition+1);
-            }
-            else if ("list-prev".equals(act)) {
-                titleChildAt(currentData.currListPosition-1);
-            }
-            else if ("list-first".equals(act)) {
+            if ("list".equals(act)) {
                 titleChildAt(0);
             }
             else if ("enter".equals(act)) {
@@ -510,10 +483,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 stopVoice();
                 currentData.currListPosition = -1;
                 RsvpWords words = new RsvpWords();
-                if ((justRead & RsvpWords.JR_TITLE) == 0) {
-                    words.addTitleWords(currentData.title).addPause();
-                    playVoice(currentData.title);
-                }
+                words.addTitleWords(currentData.title).addPause();
+                playVoice(currentData.title);
                 if (currentData.hasArticle) {
                     words.addArticleWords(currentData.entity);
                     playVoice(currentData.entity);
@@ -547,7 +518,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     play(new RsvpWords().addWarning("Place is not known"));
                 }
             }
-            if ("show".equals(act) || "home".equals(act) || "update".equals(act)) {
+            else if ("show".equals(act) || "home".equals(act) || "update".equals(act)) {
                 serverCmd(action, new SrvCallback() {
                     @Override
                     public void onSuccess(String result) {
@@ -557,6 +528,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         enterToRoom(ds);
                     }
                 });
+            }
+            else if ("show-menu".equals(act)) {
+                showMenu(wholeMenuTree);
             }
             else if ("menu".equals(act)) {
                 action.add("sectID", "site-nav-menu-story");
@@ -649,7 +623,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         tvText.setText("");
         SpannableStringBuilder sb = new SpannableStringBuilder();
         for (RsvpWords.Part part : words.getText()) {
-            String text = part.text == null ? "" : part.text.replace('\n',' ');
+            CharSequence text = Fmt.toSpannedText(part.text == null ? "" : part.text);
             int beg = sb.length();
             int end = beg + text.length();
             sb.append(text);
@@ -677,21 +651,24 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (currentData != null) {
             if (currentData.children == null || currentData.children.length == 0) {
                 currentData.currListPosition = -1;
+                rvChildren.setAdapter(null);
+                rvChildren.setVisibility(View.GONE);
             } else {
                 if (pos < 0)
                     pos = 0;
                 if (pos >= currentData.children.length)
                     pos = currentData.children.length - 1;
                 currentData.currListPosition = pos;
-                SSect aui = currentData.children[pos];
+                rvChildren.setAdapter(new SSectAdapter(currentData));
+                rvChildren.setVisibility(View.VISIBLE);
                 RsvpWords words = new RsvpWords()
-                        .addTitleWords(aui.title)
+                        .addTitleWords(currentData.title)
                         .addPause()
-                        .addValueWords(aui);
+                        .addValueWords(currentData);
                 play(words);
                 stopVoice();
-                playVoice(aui.title);
-                playValueVoice(aui);
+                playVoice(currentData.title);
+                playValueVoice(currentData);
             }
         }
         fillCommands();
@@ -730,6 +707,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
         tvText.setText("");
         rvChildren.setAdapter(null);
+        rvChildren.setVisibility(View.GONE);
         stopVoice();
         RsvpWords words = new RsvpWords();
         words.addTitleWords(ds.title);
@@ -743,9 +721,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         else if (ds.descr == null && ds.hasArticle) {
             words.addArticleWords(ds.entity);
             playVoice(ds.entity);
-        }
-        if (ds.children != null) {
-            rvChildren.setAdapter(new SSectAdapter(ds.children));
         }
         words.addValueWords(ds);
         playValueVoice(ds);
@@ -761,26 +736,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             ds.title = new SEntity();
         }
         currentData = ds;
-
-        tvText.setText("");
-        stopVoice();
-        RsvpWords words = new RsvpWords();
-        words.addTitleWords(ds.title).addPause();
-        playVoice(ds.title);
-        SSect aui = ds.getCurrChild();
-        if (aui != null) {
-            words.addTitleWords(aui.title);
-            words.addValueWords(aui);
-            playVoice(aui.title);
-            playValueVoice(aui);
-            postRsvpService(aui);
+        if (ds.currListPosition >= 0) {
+            titleChildAt(ds.currListPosition);
         } else {
-            words.addValueWords(ds);
-            playValueVoice(ds);
-            postRsvpService(ds);
+            enterToRoom(ds);
         }
-        play(words);
-        fillCommands();
     }
 
     protected SSect findParentMenu(SSect parent, SSect action) {
@@ -803,8 +763,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             final ArrayAdapter<SSect> adapter = new ArrayAdapter<>(MainActivity.this,
                     android.R.layout.select_dialog_singlechoice,
                     action.children);
+            String title = "UpStart Guide";
+            if (action.title != null && action.title.data != null)
+                title = action.title.data;
             new AlertDialog.Builder(MainActivity.this)
-                    .setTitle("UpStart Guide")
+                    .setTitle(title)
                     .setNegativeButton(R.string.txt_cancel, new DialogInterface.OnClickListener() {
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
@@ -856,7 +819,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     // Starts the query
                     conn.connect();
                     int response = conn.getResponseCode();
-                    Log.d(TAG, "The response is: " + response);
+                    Log.d(TAG, "The response is: " + conn.getResponseMessage());
                     if (response == 200) {
                         StringBuilder sb = new StringBuilder();
                         is = conn.getInputStream();
@@ -889,26 +852,35 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
 
-    static class SSectAdapter extends RecyclerView.Adapter<SSectAdapter.ViewHolder> {
-        private SSect[] mSects;
+    class SSectAdapter extends RecyclerView.Adapter<SSectAdapter.ViewHolder> {
+        private SSect mSect;
 
         // Provide a reference to the views for each data item
         // Complex data items may need more than one view per item, and
         // you provide access to all the views for a data item in a view holder
-        static class ViewHolder extends RecyclerView.ViewHolder {
+        class ViewHolder extends RecyclerView.ViewHolder implements View.OnClickListener {
             // each data item is just a string in this case
             public TextView tvTitle;
             public TextView tvIntro;
+            public Action action;
             public ViewHolder(View v) {
                 super(v);
                 tvTitle = (TextView) v.findViewById(R.id.tv_title);
                 tvIntro = (TextView) v.findViewById(R.id.tv_intro);
             }
+
+            @Override
+            public void onClick(View view) {
+                if (action != null) {
+                    mSect.currListPosition = getAdapterPosition();
+                    new ActionHandler(action).run();
+                }
+            }
         }
 
         // Provide a suitable constructor (depends on the kind of dataset)
-        public SSectAdapter(SSect[] sections) {
-            mSects = sections;
+        public SSectAdapter(SSect sect) {
+            mSect = sect;
         }
 
         // Create new views (invoked by the layout manager)
@@ -924,24 +896,51 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         // Replace the contents of a view (invoked by the layout manager)
         @Override
         public void onBindViewHolder(ViewHolder holder, int position) {
-            String title = "";
-            String descr = "";
-            if (position >= 0 && position < mSects.length) {
-                SSect sect = mSects[position];
+            CharSequence title = "";
+            CharSequence descr = null;
+            if (position >= 0 && position < mSect.children.length) {
+                SSect sect = mSect.children[position];
                 if (sect.title != null)
-                    title = sect.title.data;
+                    title = Fmt.toSpannedText(sect.title.data);
                 if (sect.descr != null)
-                    descr = sect.descr.data;
+                    descr = Fmt.toSpannedText(sect.descr.data);
+                if (sect.hasArticle || sect.hasChildren)
+                    holder.action = new Action("enter").add("sectID", sect.guid);
+                else if (sect.isAction) {
+                    holder.action = Action.create(sect.entity.data);
+                    if (sect.entity.props != null) {
+                        for (String key : sect.entity.props.keySet())
+                            holder.action.add(key, sect.entity.props.get(key));
+                    }
+                }
+                if (sect.isValue) {
+
+                }
             }
             holder.tvTitle.setText(title);
-            holder.tvIntro.setText(descr);
+            if (holder.action != null) {
+                holder.tvTitle.setCompoundDrawablesRelativeWithIntrinsicBounds(0, 0, R.drawable.ic_forward_black_48dp, 0);
+                holder.itemView.setOnClickListener(holder);
+            }
+            if (descr == null) {
+                holder.tvIntro.setText("");
+                holder.tvIntro.setVisibility(View.GONE);
+            } else {
+                holder.tvIntro.setText(descr);
+                holder.tvIntro.setVisibility(View.VISIBLE);
+            }
+        }
 
+        @Override
+        public void onViewRecycled(ViewHolder holder) {
+            super.onViewRecycled(holder);
+            holder.itemView.setOnClickListener(null);
         }
 
         // Return the size of your dataset (invoked by the layout manager)
         @Override
         public int getItemCount() {
-            return mSects.length;
+            return mSect.children.length;
         }
     }
 

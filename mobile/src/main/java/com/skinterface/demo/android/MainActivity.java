@@ -53,7 +53,7 @@ import java.util.Queue;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener
+public class MainActivity extends AppCompatActivity implements View.OnClickListener, Action.ActionExecutor
 {
 
     public static final String TAG = "SkinterPhone";
@@ -863,6 +863,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             public TextView tvTitle;
             public TextView tvIntro;
             public Action action;
+            public EdtValue editor;
             public ViewHolder(View v) {
                 super(v);
                 tvTitle = (TextView) v.findViewById(R.id.tv_title);
@@ -914,7 +915,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     }
                 }
                 if (sect.isValue) {
-
+                    holder.editor = new EdtValue(sect, MainActivity.this, MainActivity.this);
                 }
             }
             holder.tvTitle.setText(title);
@@ -929,6 +930,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 holder.tvIntro.setText(descr);
                 holder.tvIntro.setVisibility(View.VISIBLE);
             }
+            if (holder.editor != null)
+                ((ViewGroup)holder.tvIntro.getParent()).addView(holder.editor.makeWidget(false));
         }
 
         @Override

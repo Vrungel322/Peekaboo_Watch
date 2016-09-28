@@ -12,4 +12,7 @@
     <string name="txt_value"  >Value</string>
     <string name="txt_warning">Warning</string>
     <string name="txt_menu"   >Menu</string>
+
+    <string name="txt_edt_latitude">lat</string>
+    <string name="txt_edt_longitude">lng</string>
 </resources>

@@ -63,24 +63,13 @@
         android:layout_height="56dp">
 
 
-        <LinearLayout
-            android:id="@+id/sf_forward"
-            android:layout_width="wrap_content"
+        <ImageButton
+            android:id="@+id/sf_next_auto"
+            android:layout_width="56dp"
             android:layout_height="56dp"
             android:layout_alignParentRight="true"
-            android:orientation="horizontal">
-            <ImageButton
-                android:id="@+id/sf_forward1"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                android:src="@drawable/ic_forward_black_48dp"
-                />
-            <ImageButton
-                android:id="@+id/sf_forward2"
-                android:layout_width="56dp"
-                android:layout_height="56dp"
-                />
-        </LinearLayout>
+            android:src="@drawable/ic_forward_black_48dp"
+            />
     </RelativeLayout>
 
 </LinearLayout>

@@ -29,6 +29,8 @@ public final class RsvpWords {
     public static final int JR_WARNING = 16;
     // Just-read Menu
     public static final int JR_MENU    = 32;
+    // Just-read list of children
+    public static final int JR_LIST    = 64;
 
     public static class Word {
         final char icon;

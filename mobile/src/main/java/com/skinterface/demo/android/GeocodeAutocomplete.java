@@ -2,6 +2,7 @@ package com.skinterface.demo.android;
 
 
 import android.content.Context;
+import android.os.AsyncTask;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
@@ -16,6 +17,7 @@ import android.widget.Toast;
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
+import org.json.JSONTokener;
 
 import java.io.IOException;
 import java.io.InputStreamReader;
@@ -29,10 +31,38 @@ public class GeocodeAutocomplete extends AutoCompleteTextView implements OnItemC
 
     private static final String LOG_TAG = "geocode";
     private static final String PLACES_API_BASE = "https://maps.googleapis.com/maps/api/place";
+    private static final String TIMEZONE_API_BASE = "https://maps.googleapis.com/maps/api/timezone";
     private static final String TYPE_AUTOCOMPLETE = "/autocomplete";
+    private static final String TYPE_DETAILS = "/details";
     private static final String OUT_JSON = "/json";
 
     private static final String API_KEY = "AIzaSyCNytttK7SCCGuCmh8VufOGQ4nwH8BCLm8";
+
+    public OnPlaceResolvedListener listener;
+
+    public String description;
+    public String address;
+    public String placeId;
+    public String latitude;
+    public String longitude;
+    public String timezone;
+
+    static class PlaceInfo {
+        String description;
+        String placeId;
+        public PlaceInfo(String description, String placeId) {
+            this.description = description;
+            this.placeId = placeId;
+        }
+        @Override
+        public String toString() {
+            return description;
+        }
+    }
+
+    public interface OnPlaceResolvedListener {
+        void onPlaceResolved(GeocodeAutocomplete geocode);
+    }
 
     public GeocodeAutocomplete(Context context) {
         super(context);
@@ -54,67 +84,90 @@ public class GeocodeAutocomplete extends AutoCompleteTextView implements OnItemC
         setOnItemClickListener(this);
     }
 
-    public void onItemClick(AdapterView adapterView, View view, int position, long id) {
-        String str = (String) adapterView.getItemAtPosition(position);
-        Toast.makeText(getContext(), str, Toast.LENGTH_SHORT).show();
+    public OnPlaceResolvedListener getOnPlaceResolvedListener() {
+        return listener;
     }
 
-    public static ArrayList autocomplete(String input) {
-        ArrayList resultList = null;
+    public void setOnPlaceResolvedListener(OnPlaceResolvedListener listener) {
+        this.listener = listener;
+    }
 
-        HttpURLConnection conn = null;
-        StringBuilder jsonResults = new StringBuilder();
+    public void onItemClick(AdapterView adapterView, View view, int position, long id) {
+        PlaceInfo pi = (PlaceInfo) adapterView.getItemAtPosition(position);
+        fillDetails(pi);
+    }
+
+    public static ArrayList<PlaceInfo> autocomplete(String input) {
+        ArrayList<PlaceInfo> resultList = null;
+
         try {
             StringBuilder sb = new StringBuilder(PLACES_API_BASE + TYPE_AUTOCOMPLETE + OUT_JSON);
             sb.append("?key=" + API_KEY);
             sb.append("&types=geocode");
-            //sb.append("&components=country:gr");
             sb.append("&input=" + URLEncoder.encode(input, "utf8"));
-
             URL url = new URL(sb.toString());
-            conn = (HttpURLConnection) url.openConnection();
-            InputStreamReader in = new InputStreamReader(conn.getInputStream());
-
-            // Load the results into a StringBuilder
-            int read;
-            char[] buff = new char[1024];
-            while ((read = in.read(buff)) != -1) {
-                jsonResults.append(buff, 0, read);
-            }
-        } catch (MalformedURLException e) {
-            Log.e(LOG_TAG, "Error processing Places API URL", e);
-            return resultList;
-        } catch (IOException e) {
-            Log.e(LOG_TAG, "Error connecting to Places API", e);
-            return resultList;
-        } finally {
-            if (conn != null) {
-                conn.disconnect();
-            }
-        }
-
-        try {
-            // Create a JSON object hierarchy from the results
-            JSONObject jsonObj = new JSONObject(jsonResults.toString());
-            JSONArray predsJsonArray = jsonObj.getJSONArray("predictions");
-
+            JSONObject jobj = IOUtils.parseHTTPResponce(url.openConnection());
+            if (jobj == null)
+                return resultList;
+            JSONArray predsJsonArray = jobj.getJSONArray("predictions");
             // Extract the Place descriptions from the results
-            resultList = new ArrayList(predsJsonArray.length());
+            resultList = new ArrayList<PlaceInfo>(predsJsonArray.length());
             for (int i = 0; i < predsJsonArray.length(); i++) {
-                System.out.println(predsJsonArray.getJSONObject(i).getString("description"));
-                System.out.println(predsJsonArray.getJSONObject(i).getString("place_id"));
-                System.out.println("============================================================");
-                resultList.add(predsJsonArray.getJSONObject(i).getString("description"));
+                JSONObject jpl = predsJsonArray.getJSONObject(i);
+                PlaceInfo pi = new PlaceInfo(jpl.getString("description"), jpl.getString("place_id"));
+                Log.d(LOG_TAG, i+":"+pi.placeId+":"+pi.description);
+                resultList.add(pi);
             }
-        } catch (JSONException e) {
-            Log.e(LOG_TAG, "Cannot process JSON results", e);
+        } catch (Exception e) {
+            Log.e(LOG_TAG, "Cannot getting places", e);
         }
 
         return resultList;
     }
 
-    class GooglePlacesAutocompleteAdapter extends ArrayAdapter<String> implements Filterable {
-        private ArrayList<String> resultList;
+    private void fillDetails(final PlaceInfo pi) {
+        new AsyncTask<Void,Void,Boolean>() {
+            @Override
+            protected Boolean doInBackground(Void... params) {
+                try {
+                    StringBuilder sb = new StringBuilder(PLACES_API_BASE + TYPE_DETAILS + OUT_JSON);
+                    sb.append("?key=" + API_KEY);
+                    sb.append("&placeid=" + pi.placeId);
+                    URL url = new URL(sb.toString());
+                    JSONObject jobj = IOUtils.parseHTTPResponce(url.openConnection());
+                    placeId = pi.placeId;
+                    description = pi.description;
+                    address = jobj.getJSONObject("result").getString("formatted_address");
+                    JSONObject loc = jobj.getJSONObject("result").getJSONObject("geometry").getJSONObject("location");
+                    latitude = loc.getString("lat");
+                    longitude = loc.getString("lng");
+                    Log.i(LOG_TAG, "lat:"+latitude+"; lng:"+longitude+"; descr:"+description+"; adder:"+address);
+
+                    sb = new StringBuilder(TIMEZONE_API_BASE + OUT_JSON);
+                    sb.append("?key=" + API_KEY);
+                    sb.append("&location=" + latitude + "," + longitude);
+                    sb.append("&timestamp=0");
+                    url = new URL(sb.toString());
+                    jobj = IOUtils.parseHTTPResponce(url.openConnection());
+                    timezone = jobj.getString("timeZoneId");
+                    Log.i(LOG_TAG, "timezone:"+timezone);
+                    return Boolean.TRUE;
+                } catch (Exception e) {
+                    Log.e(LOG_TAG, "Cannot fill place info", e);
+                }
+                return Boolean.FALSE;
+            }
+
+            @Override
+            protected void onPostExecute(Boolean res) {
+                if (res != null && res.booleanValue() && listener != null)
+                    listener.onPlaceResolved(GeocodeAutocomplete.this);
+            }
+        }.execute();
+    }
+
+    class GooglePlacesAutocompleteAdapter extends ArrayAdapter<PlaceInfo> implements Filterable {
+        private ArrayList<PlaceInfo> resultList;
 
         public GooglePlacesAutocompleteAdapter(Context context, int textViewResourceId) {
             super(context, textViewResourceId);
@@ -126,7 +179,7 @@ public class GeocodeAutocomplete extends AutoCompleteTextView implements OnItemC
         }
 
         @Override
-        public String getItem(int index) {
+        public PlaceInfo getItem(int index) {
             return resultList.get(index);
         }
 
@@ -139,10 +192,11 @@ public class GeocodeAutocomplete extends AutoCompleteTextView implements OnItemC
                     if (constraint != null) {
                         // Retrieve the autocomplete results.
                         resultList = autocomplete(constraint.toString());
-
-                        // Assign the data to the FilterResults
-                        filterResults.values = resultList;
-                        filterResults.count = resultList.size();
+                        if (resultList != null) {
+                            // Assign the data to the FilterResults
+                            filterResults.values = resultList;
+                            filterResults.count = resultList.size();
+                        }
                     }
                     return filterResults;
                 }

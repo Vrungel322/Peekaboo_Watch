@@ -79,9 +79,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     TextView tvText;
     TextView tvStatus;
     RecyclerView rvChildren;
-    View        grpForward;
-    ImageButton btnForward1;
-    ImageButton btnForward2;
+    ImageButton btnForward;
 
     String sessionID;
     Map<String,String> storage = new HashMap<>();
@@ -120,12 +118,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         rvChildren.setLayoutManager(new LinearLayoutManager(this));
         rvChildren.setHasFixedSize(false);
         rvChildren.setVisibility(View.GONE);
-        grpForward = findViewById(R.id.sf_forward);
-        btnForward1 = (ImageButton)findViewById(R.id.sf_forward1);
-        btnForward2 = (ImageButton)findViewById(R.id.sf_forward2);
-        grpForward.setVisibility(View.GONE);
-        btnForward1.setOnClickListener(this);
-        btnForward2.setOnClickListener(this);
+        btnForward = (ImageButton)findViewById(R.id.sf_next_auto);
+        btnForward.setOnClickListener(this);
     }
 
     @Override
@@ -253,7 +247,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             executeAction(new Action("where"));
             return true;
         }
-        if (id == R.id.sf_forward1 || id == R.id.sf_forward2) {
+        if (id == R.id.sf_next_auto) {
             if (actionAutoNext != null)
                 makeActionHandler(actionAutoNext.entity).run();
             return true;
@@ -332,10 +326,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         if (this.currentData != null) {
             SSect ds = this.currentData;
             SSect theNext = SSect.makeAction("Continue: Guide", "show-menu");
-            if (ds.children != null && ds.children.length > 0 && ds.currListPosition >= 0) {
-                theNext = SSect.makeAction("Continue: Stop list", "stop");
-                currActions.add(SSect.makeAction("Stop list", "stop"));
-            } else {
+            {
                 if (ds.returnUp != null && ds.currListPosition < 0) {
                     currActions.add(SSect.makeAction("Return UP", "return-up"));
                     SSect up = ds.returnUp;
@@ -358,9 +349,25 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     currActions.add(SSect.makeAction("Read", "read"));
                 }
                 if (ds.children != null && ds.children.length > 0) {
-                    if (!ds.nextAsSkip || ds.returnUp == null)
-                        theNext = SSect.makeAction("Continue: List", "list");
-                    currActions.add(SSect.makeAction("List", "list"));
+                    if (!ds.nextAsSkip || ds.returnUp == null) {
+                        if ((justRead & RsvpWords.JR_LIST) == 0) {
+                            theNext = SSect.makeAction("Continue: List", "list");
+                        } else {
+                            for (int position=0; position < ds.children.length; ++position) {
+                                SSect child = ds.children[position];
+                                if (child.isAction) {
+                                    theNext = SSect.copyAction(child).padd("position", position);
+                                    break;
+                                }
+                                else if (child.hasArticle || child.hasChildren || child.children != null) {
+                                    theNext = SSect.makeAction("Continue: Enter", "enter").padd("sectID", child.guid).padd("position", position);
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if ((justRead & RsvpWords.JR_LIST) == 0)
+                        currActions.add(SSect.makeAction("List", "list"));
                 }
                 if (ds.isValue && ds.children == null) {
                     SSect aui = SSect.copyAction(ds);
@@ -416,21 +423,22 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 //        }
         {
             if (actionAutoNext == null) {
-                grpForward.setVisibility(View.GONE);
-                btnForward2.setImageResource(0);
+                btnForward.setVisibility(View.GONE);
             } else {
-                grpForward.setVisibility(View.VISIBLE);
+                btnForward.setVisibility(View.VISIBLE);
                 String act = actionAutoNext.entity.data;
                 if ("read".equals(act))
-                    btnForward2.setImageResource(R.drawable.ic_format_align_left_black_48dp);
+                    btnForward.setImageResource(R.drawable.ic_format_align_left_black_48dp);
                 else if ("list".equals(act))
-                    btnForward2.setImageResource(R.drawable.ic_format_list_bulleted_black_48dp);
+                    btnForward.setImageResource(R.drawable.ic_format_list_bulleted_black_48dp);
                 else if ("auto-next-up".equals(act))
-                    btnForward2.setImageResource(R.drawable.ic_playlist_play_black_48dp);
-                else if ("enter".equals(act))
-                    btnForward2.setImageResource(R.drawable.ic_exit_to_app_black_48dp);
+                    btnForward.setImageResource(R.drawable.ic_redo_black_48dp);
+                else if ("enter".equals(act) || "show".equals(act))
+                    btnForward.setImageResource(R.drawable.ic_exit_to_app_black_48dp);
                 else if ("show-menu".equals(act))
-                    btnForward2.setImageResource(R.drawable.ic_more_vert_black_48dp);
+                    btnForward.setImageResource(R.drawable.ic_menu_black_48dp);
+                else
+                    btnForward.setImageResource(R.drawable.ic_touch_app_black_48dp);
             }
         }
     }
@@ -454,7 +462,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             }
             else if ("auto-next-up".equals(act)) {
                 returnUp(currentData, +1);
-                return;
             }
             else if ("sibling-next".equals(act)) {
                 returnUp(currentData, +1);
@@ -509,7 +516,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         //    executeAction(result);
                     }
                 });
-                return;
             }
             else if ("where".equals(act)) {
                 if (currentData != null) {
@@ -520,6 +526,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 }
             }
             else if ("show".equals(act) || "home".equals(act) || "update".equals(act)) {
+                if (action.val("position") != null) {
+                    if (currentData != null)
+                        currentData.currListPosition = Integer.parseInt(action.val("position"));
+                    action.del("position");
+                }
                 serverCmd(action, new SrvCallback() {
                     @Override
                     public void onSuccess(String result) {
@@ -588,6 +599,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             });
         }
         void enterDown(final SSect parent, final Action action) {
+            if (action.val("position") != null) {
+                parent.currListPosition = Integer.parseInt(action.val("position"));
+                action.del("position");
+            }
             serverCmd(action, new SrvCallback() {
                 @Override
                 public void onSuccess(String result) {
@@ -671,6 +686,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 playVoice(currentData.title);
                 playValueVoice(currentData);
             }
+            justRead |= RsvpWords.JR_LIST;
         }
         fillCommands();
     }
@@ -723,10 +739,16 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             words.addArticleWords(ds.entity);
             playVoice(ds.entity);
         }
+        else if (currentData.children != null && currentData.children.length > 0) {
+            rvChildren.setAdapter(new SSectAdapter(currentData));
+            rvChildren.setVisibility(View.VISIBLE);
+        }
         words.addValueWords(ds);
         playValueVoice(ds);
         play(words);
         postRsvpService(ds);
+        if (rvChildren.getVisibility() == View.VISIBLE)
+            justRead |= RsvpWords.JR_LIST;
         fillCommands();
     }
 
@@ -906,15 +928,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     title = Fmt.toSpannedText(sect.title.data);
                 if (sect.descr != null)
                     descr = Fmt.toSpannedText(sect.descr.data);
-                if (sect.hasArticle || sect.hasChildren)
-                    holder.action = new Action("enter").add("sectID", sect.guid);
-                else if (sect.isAction) {
+                if (sect.isAction) {
                     holder.action = Action.create(sect.entity.data);
                     if (sect.entity.props != null) {
                         for (String key : sect.entity.props.keySet())
                             holder.action.add(key, sect.entity.props.get(key));
                     }
                 }
+                else if (sect.hasArticle || sect.hasChildren || sect.children != null)
+                    holder.action = new Action("enter").add("sectID", sect.guid).add("position", position);
                 if (sect.isValue) {
                     holder.editor = new EdtValue(sect, MainActivity.this, MainActivity.this);
                 }

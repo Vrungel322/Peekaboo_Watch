@@ -129,40 +129,31 @@ public class EdtValue {
                 try {
                     JSONObject jobj = new JSONObject(value.entity.data);
                     if (jobj != null && jobj.has("address"))
-                        edt.setText(jobj.getString("address"));
+                        edt.setText(jobj.getString("address"), false);
                 } catch (Exception e) {
                     error = e.toString();
                 }
             }
-//            edt.setOnItemSelectedListener(new AdapterView.OnItemSelectedListener() {
-//                @Override
-//                public void onItemSelected(AdapterView<?> adapterView, View view, int i, long l) {
-//                    GeocodingResult place = (GeocodingResult)adapterView.getAdapter().getItem(i);
-//                    String address = place.formattedAddress;
-//                    Geometry geometry = place.geometry;
-//                    double dlat = geometry.location.lat;
-//                    double dlon = geometry.location.lng;
-//                    address = saveGeoCode(address, dlat, dlon);
-//                    edt.setText(address);
-//                }
-//                @Override
-//                public void onNothingSelected(AdapterView<?> adapterView) {
-//                }
-//            });
+            edt.setOnPlaceResolvedListener(new GeocodeAutocomplete.OnPlaceResolvedListener() {
+                @Override
+                public void onPlaceResolved(GeocodeAutocomplete geocode) {
+                    String address = saveGeoCode(geocode);
+                    edt.setText(address, false);
+                }
+            });
             return edt;
         }
-//        else if ("date".equals(value.entity.media) || "datetime".equals(value.entity.media)) {
-//            final DateTimePicker box = new DateTimePicker(value.entity.data);
-//            box.addValueChangeHandler(new ValueChangeHandler<String>() {
-//                @Override
-//                public void onValueChange(ValueChangeEvent<String> event) {
-//                    String str = event.getValue();
-//                    Action action = Action.create("set").add(value.entity.name, str);
-//                    executeAction(action);
-//                }
-//            });
-//            return wrapToDetails(isHtml, box);
-//        }
+        else if ("date".equals(value.entity.media) || "datetime".equals(value.entity.media)) {
+            final DateTimeEditText edt = new DateTimeEditText(context);
+            edt.setDateString(value.entity.data);
+            edt.setDateTimeCompleteListener(new DateTimeEditText.OnDateTimeCompleteListener() {
+                @Override
+                public void onDateTimeComplete(DateTimeEditText dt, String text) {
+                    executeAction(Action.create("set").add(value.entity.name, text));
+                }
+            });
+            return edt;
+        }
         else {
             EditText edt = new EditText(context);
             if (value.entity.data != null)
@@ -172,14 +163,15 @@ public class EdtValue {
         }
     }
 
-    String saveGeoCode(String address, double dlat, double dlon) {
-        address += " ("+Math.round(dlat)+"°"+context.getString(R.string.txt_edt_latitude)+" / "+Math.round(dlon)+"°"+context.getString(R.string.txt_edt_longitude)+")";
-        String lat = "" + Math.round(dlat * 10000) / 10000.;
-        String lon = "" + Math.round(dlon * 10000) / 10000.;
+    String saveGeoCode(GeocodeAutocomplete geocode) {
+        String lat = geocode.latitude;
+        String lon = geocode.longitude;
+        String address = geocode.description + " ("+lat+"°"+context.getString(R.string.txt_edt_latitude)+" / "+lon+"°"+context.getString(R.string.txt_edt_longitude)+")";
         Action action = Action.create("set");
         action.add(value.entity.name + ".address", address);
         action.add(value.entity.name + ".latitude", lat);
         action.add(value.entity.name + ".longitude", lon);
+        action.add(value.entity.name + ".timezone", geocode.timezone);
         try {
             JSONObject jobj = new JSONObject();
             jobj.put("address", address);
@@ -188,43 +180,43 @@ public class EdtValue {
             value.entity.data = jobj.toString();
             action.add(value.entity.name, value.entity.data);
             executeAction(action);
-            InputStream is = null;
-            try {
-                URL url = new URL("http://api.geonames.org/timezoneJSON?lat="+lat+"&lng="+lon+"&username=mkizub");
-                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                conn.setReadTimeout(5000 /* milliseconds */);
-                conn.setConnectTimeout(5000 /* milliseconds */);
-                conn.setRequestMethod("GET");
-                conn.setDoInput(true);
-                // Starts the query
-                conn.connect();
-                int response = conn.getResponseCode();
-                Log.d(TAG, "The response is: " + conn.getResponseMessage());
-                if (response == 200) {
-                    StringBuilder sb = new StringBuilder();
-                    is = conn.getInputStream();
-                    InputStreamReader reader = new InputStreamReader(is, "UTF-8");
-                    char[] buffer = new char[4096];
-                    int sz;
-                    while ((sz = reader.read(buffer)) > 0)
-                        sb.append(buffer, 0, sz);
-                    reader.close();
-                    final String result = sb.toString();
-                    JSONObject val = new JSONObject(result);
-                    String timezone = val.getString("timezoneId");
-                    Action set = Action.create("set").add(value.entity.name + ".timezone", timezone);
-                    executeAction(set);
-                } else {
-                    error = "Error on server request";
-                }
-            } catch (Throwable e) {
-                Log.e(TAG, "Server connection error", e);
-                error = "Error on server request";
-            } finally {
-                if (is != null) {
-                    try { is.close(); } catch (IOException e) {}
-                }
-            }
+//            InputStream is = null;
+//            try {
+//                URL url = new URL("http://api.geonames.org/timezoneJSON?lat="+lat+"&lng="+lon+"&username=mkizub");
+//                HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+//                conn.setReadTimeout(5000 /* milliseconds */);
+//                conn.setConnectTimeout(5000 /* milliseconds */);
+//                conn.setRequestMethod("GET");
+//                conn.setDoInput(true);
+//                // Starts the query
+//                conn.connect();
+//                int response = conn.getResponseCode();
+//                Log.d(TAG, "The response is: " + conn.getResponseMessage());
+//                if (response == 200) {
+//                    StringBuilder sb = new StringBuilder();
+//                    is = conn.getInputStream();
+//                    InputStreamReader reader = new InputStreamReader(is, "UTF-8");
+//                    char[] buffer = new char[4096];
+//                    int sz;
+//                    while ((sz = reader.read(buffer)) > 0)
+//                        sb.append(buffer, 0, sz);
+//                    reader.close();
+//                    final String result = sb.toString();
+//                    JSONObject val = new JSONObject(result);
+//                    String timezone = val.getString("timezoneId");
+//                    Action set = Action.create("set").add(value.entity.name + ".timezone", timezone);
+//                    executeAction(set);
+//                } else {
+//                    error = "Error on server request";
+//                }
+//            } catch (Throwable e) {
+//                Log.e(TAG, "Server connection error", e);
+//                error = "Error on server request";
+//            } finally {
+//                if (is != null) {
+//                    try { is.close(); } catch (IOException e) {}
+//                }
+//            }
         } catch (Exception e) {
             error = e.toString();
         }

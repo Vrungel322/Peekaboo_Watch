@@ -62,6 +62,29 @@
         android:layout_width="match_parent"
         android:layout_height="56dp">
 
+        <ImageButton
+            android:id="@+id/sf_menu"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_alignParentLeft="true"
+            android:src="@drawable/ic_menu_black_48dp"
+            />
+
+        <ImageButton
+            android:id="@+id/sf_return_up"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_toRightOf="@+id/sf_menu"
+            android:src="@drawable/ic_arrow_upward_black_48dp"
+            />
+
+        <ImageButton
+            android:id="@+id/sf_descr"
+            android:layout_width="56dp"
+            android:layout_height="56dp"
+            android:layout_toRightOf="@+id/sf_return_up"
+            android:src="@drawable/ic_info_outline_black_48dp"
+            />
 
         <ImageButton
             android:id="@+id/sf_next_auto"

@@ -47,7 +47,6 @@ import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedList;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
@@ -97,8 +96,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     // describes what was just presented (shown, read) to user
     int justRead;
 
-    List<SSect> currActions = new ArrayList<>();
-
     Queue<String> voiceQueue = new LinkedList<>();
     //boolean voiceBusy;
 
@@ -121,7 +118,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         rvChildren.setLayoutManager(new LinearLayoutManager(this));
         rvChildren.setHasFixedSize(false);
         rvChildren.setVisibility(View.GONE);
-        btnForward = (ImageButton)findViewById(R.id.sf_next_auto);
+        setButtonEnabled(R.id.sf_menu, false);
+        setButtonEnabled(R.id.sf_return_up, false);
+        setButtonEnabled(R.id.sf_descr, false);
+        actionAutoNext = SSect.makeAction("Continue: Hello UpStars", "hello");
+        btnForward = (ImageButton) findViewById(R.id.sf_next_auto);
+        btnForward.setImageResource(R.drawable.ic_touch_app_black_48dp);
         btnForward.setOnClickListener(this);
     }
 
@@ -246,13 +248,17 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             showMenu(wholeMenuTree);
             return true;
         }
-        if (id == R.id.sf_where) {
-            executeAction(new Action("where"));
+        if (id == R.id.sf_where || id == R.id.sf_descr) {
+            executeAction(new Action("descr"));
             return true;
         }
         if (id == R.id.sf_next_auto) {
             if (actionAutoNext != null)
                 makeActionHandler(actionAutoNext.entity).run();
+            return true;
+        }
+        if (id == R.id.sf_return_up) {
+            executeAction(new Action("return-up"));
             return true;
         }
 
@@ -323,33 +329,45 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         storage.put(ds.guid+".intro", String.valueOf(value));
     }
 
+    void setButtonEnabled(int id, boolean on) {
+        ImageButton btn = (ImageButton)findViewById(id);
+        if (btn == null || btn.isEnabled() == on)
+            return;
+        if (on) {
+            btn.setEnabled(true);
+            btn.setOnClickListener(this);
+            btn.setImageAlpha(255);
+        } else {
+            btn.setEnabled(false);
+            btn.setClickable(false);
+            btn.setOnClickListener(null);
+            btn.setImageAlpha(64);
+        }
+    }
+
     void fillCommands() {
-        currActions.clear();
         actionAutoNext = null;
         if (this.currentData != null) {
             SSect ds = this.currentData;
             SSect theNext = SSect.makeAction("Continue: Guide", "show-menu");
             {
+                setButtonEnabled(R.id.sf_return_up, ds.returnUp != null);
                 if (ds.returnUp != null && ds.currListPosition < 0) {
-                    currActions.add(SSect.makeAction("Return UP", "return-up"));
                     SSect up = ds.returnUp;
                     SSect[] ch = up.children;
                     if (ch != null && up.currListPosition >= 0) {
                         boolean has_prev = (up.currListPosition > 0);
                         boolean has_next = (up.currListPosition < ch.length - 1);
-                        currActions.add(SSect.makeAction("PREV", has_prev ? "sibling-prev" : "none"));
-                        currActions.add(SSect.makeAction("NEXT", has_next ? "sibling-next" : "none"));
+                        //currActions.add(SSect.makeAction("PREV", has_prev ? "sibling-prev" : "none"));
+                        //currActions.add(SSect.makeAction("NEXT", has_next ? "sibling-next" : "none"));
                         theNext = SSect.makeAction("Continue: UP+Next", "auto-next-up");
                     }
                 }
-                if (currentData.descr != null)
-                    currActions.add(SSect.makeAction("Describe", "descr"));
-                else
-                    currActions.add(SSect.makeAction("Describe", "none"));
+                setButtonEnabled(R.id.sf_descr, currentData.descr != null);
                 if (ds.hasArticle) {
                     if (!ds.nextAsSkip && (justRead & RsvpWords.JR_ARTICLE) == 0)
                         theNext = SSect.makeAction("Continue: Read", "read");
-                    currActions.add(SSect.makeAction("Read", "read"));
+                    //currActions.add(SSect.makeAction("Read", "read"));
                 }
                 if (ds.children != null && ds.children.length > 0) {
                     if (!ds.nextAsSkip || ds.returnUp == null) {
@@ -369,61 +387,22 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                             }
                         }
                     }
-                    if ((justRead & RsvpWords.JR_LIST) == 0)
-                        currActions.add(SSect.makeAction("List", "list"));
-                }
-                if (ds.isValue && ds.children == null) {
-                    SSect aui = SSect.copyAction(ds);
-                    aui.title.data = "Input (" + ds.entity.media + ")";
-                    aui.isValue = true;
-                    currActions.add(aui);
+                    //if ((justRead & RsvpWords.JR_LIST) == 0)
+                    //    currActions.add(SSect.makeAction("List", "list"));
                 }
                 if (ds.isAction) {
-                    currActions.add(ds);
+                    //currActions.add(ds);
                     theNext = SSect.copyAction(ds).prependTitle("Continue: Go to ");
                 }
             }
             actionAutoNext = theNext;
+        } else {
+            actionAutoNext = SSect.makeAction("Continue: Hello UpStars", "hello");
         }
         updateCommands();
     }
     void updateCommands() {
         ArrayList<SSect> actions = new ArrayList<>();
-        if (!currActions.isEmpty()) {
-            actions.add(SSect.makeAction(getString(R.string.txt_local), null));
-            actions.addAll(currActions);
-        }
-//        actn_panel.clear();
-//        for (final SSect aui : actions) {
-//            Widget w;
-//            if (aui.isValue) {
-//                EdtValue edt = new EdtValue(aui, this, DC);
-//                w = edt.makeWidget(false);
-//                if (edt.error != null)
-//                    setStatus(edt.error);
-//                if (aui.title != null) {
-//                    FlowPanel pan = new FlowPanel();
-//                    pan.add(new Label(aui.title.data, false));
-//                    pan.add(w);
-//                    w = pan;
-//                }
-//            }
-//            else if (aui.entity.data == null) {
-//                w = new Label(aui.title.data, false);
-//            }
-//            else {
-//                w = new Button(aui.title.data, new ClickHandler() {
-//                    @Override
-//                    public void onClick(ClickEvent event) {
-//                        makeActionHandler(aui.entity).execute();
-//                    }
-//                });
-//                if ("none".equals(aui.entity.data))
-//                    ((Button)w).setEnabled(false);
-//            }
-//
-//            actn_panel.add(w);
-//        }
         {
             if (actionAutoNext == null) {
                 btnForward.setVisibility(View.GONE);
@@ -554,8 +533,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     public void onSuccess(String result) {
                         SSect ds = SSect.fromJson(result);
                         wholeMenuTree = ds;
+                        setButtonEnabled(R.id.sf_menu, true);
                     }
                 });
+            }
+            else if ("hello".equals(act)) {
+                doAction(R.id.sf_hello);
             }
         }
         void returnUp(final SSect ds, final int lp_delta) {

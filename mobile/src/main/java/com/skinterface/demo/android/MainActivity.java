@@ -30,6 +30,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.ImageButton;
+import android.widget.ScrollView;
 import android.widget.TextView;
 
 import org.json.JSONException;
@@ -76,6 +77,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     };
 
+    ScrollView mainTextScroller;
     TextView tvText;
     TextView tvStatus;
     RecyclerView rvChildren;
@@ -112,6 +114,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         setContentView(R.layout.activity_main);
         Toolbar mToolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(mToolbar);
+        mainTextScroller = (ScrollView)findViewById(R.id.text_scroller);
         tvText = (TextView)findViewById(R.id.text);
         tvStatus = (TextView)findViewById(R.id.status);
         rvChildren = (RecyclerView) findViewById(R.id.children);
@@ -653,6 +656,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             sb.append('\n').append('\n');
         }
         tvText.setText(sb);
+        mainTextScroller.fullScroll(View.FOCUS_UP);
     }
 
     protected void stopVoice() {
@@ -742,6 +746,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         else if (currentData.children != null && currentData.children.length > 0) {
             rvChildren.setAdapter(new SSectAdapter(currentData));
             rvChildren.setVisibility(View.VISIBLE);
+        }
+        else if (!currentData.isValue) {
+            words.addIntroWords(ds.descr);
+            playVoice(ds.descr);
         }
         words.addValueWords(ds);
         playValueVoice(ds);

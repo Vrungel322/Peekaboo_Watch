@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Skin Lib</string>
+    <string name="txt_article">Статья</string>
+    <string name="txt_back">Назад</string>
+    <string name="txt_cancel">Отменить</string>
+    <string name="txt_edt_latitude">шир</string>
+    <string name="txt_edt_longitude">дол</string>
+    <string name="txt_global">Глобально</string>
+    <string name="txt_intro">Описание</string>
+    <string name="txt_local">Локально</string>
+    <string name="txt_menu">Меню</string>
+    <string name="txt_title">Заголовок</string>
+    <string name="txt_value">Значение</string>
+    <string name="txt_warning">Предупреждение</string>
+</resources>

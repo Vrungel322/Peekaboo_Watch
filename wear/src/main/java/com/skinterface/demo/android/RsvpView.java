@@ -5,6 +5,7 @@ import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.Rect;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.Message;
 import android.util.AttributeSet;
@@ -49,6 +50,7 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
     private SurfaceHolder surfaceHolder;
     private Paint paint = new Paint();
     private RsvpViewListener listener;
+    private Drawable icon_mic;
 
     static final int BLACK = 0xFF222222;
     static final int GRAY = 0xFFAAAAAA;
@@ -64,17 +66,26 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
 
     public RsvpView(Context context) {
         super(context);
-        getHolder().addCallback(this);
+        init();
     }
 
     public RsvpView(Context context, AttributeSet attrs) {
         super(context, attrs);
-        getHolder().addCallback(this);
+        init();
     }
 
     public RsvpView(Context context, AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        init();
+    }
+
+    private void init() {
         getHolder().addCallback(this);
+        icon_mic = getContext().getResources().getDrawable(R.drawable.ic_mic_white_48dp);
+        if (icon_mic != null) {
+            icon_mic.mutate();
+            icon_mic.setAlpha(64);
+        }
     }
 
     public RsvpViewListener getListener() {
@@ -132,9 +143,6 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
                 paint.setColor(BLACK);
                 paint.setStyle(Paint.Style.STROKE);
                 paint.setStrokeWidth(2*LINE_HW);
-                //paint.setColor(BLACK);
-                //c2d.drawRect(0, PIVOT_H, CANVAS_W, CANVAS_H - 2* PIVOT_H, paint);
-                //c2d.drawRect(0, 0, CANVAS_W, CANVAS_H, paint);
                 paint.setColor(GRAY);
                 c2d.drawLine(0, LINE_HW, CANVAS_W, LINE_HW, paint);
                 c2d.drawLine(0, CANVAS_H-LINE_HW, CANVAS_W, CANVAS_H-LINE_HW, paint);
@@ -209,15 +217,56 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
         }
     }
 
+    class IconPlayer implements Runnable {
+        @Override
+        public void run() {
+            SurfaceHolder holder = surfaceHolder;
+            Canvas c2d = null;
+            try {
+                if (holder != null)
+                    c2d = holder.lockCanvas(null);
+                if (c2d == null)
+                    return;
+                Paint paint = RsvpView.this.paint;
+                c2d.drawColor(BLACK);
+                paint.setColor(BLACK);
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(2*LINE_HW);
+                paint.setColor(GRAY);
+                c2d.drawLine(0, LINE_HW, CANVAS_W, LINE_HW, paint);
+                c2d.drawLine(0, CANVAS_H-LINE_HW, CANVAS_W, CANVAS_H-LINE_HW, paint);
+                paint.setColor(RED);
+                c2d.drawLine(PIVOT_X, 2*LINE_HW, PIVOT_X, PIVOT_H, paint);
+                c2d.drawLine(PIVOT_X, CANVAS_H-2*LINE_HW, PIVOT_X, CANVAS_H-PIVOT_H, paint);
+
+                if (icon_mic != null) {
+                    icon_mic.setAlpha(64);
+                    icon_mic.setBounds(CANVAS_W/2-40, CANVAS_H/2-40, CANVAS_W/2+40, CANVAS_H/2+40);
+                    icon_mic.draw(c2d);
+                }
+            } finally {
+                if (c2d != null)
+                    holder.unlockCanvasAndPost(c2d);
+            }
+        }
+    }
+
     void play(final RsvpWords words) {
         ScheduledFuture<?> sf = future;
         if (sf != null)
             sf.cancel(false);
-        setKeepScreenOn(true);
+        try { setKeepScreenOn(true); } catch (Exception e) {}
         RsvpPlayer player = new RsvpPlayer(words);
         sf = executor.scheduleAtFixedRate(player, 100, 25, TimeUnit.MILLISECONDS);
         player.future = sf;
         future = sf;
+    }
+
+    void playIcons() {
+        ScheduledFuture<?> sf = future;
+        if (sf != null)
+            sf.cancel(false);
+        executor.execute(new IconPlayer());
     }
 
     void stop(ScheduledFuture<?> sf) {
@@ -228,9 +277,9 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
         }
         sf.cancel(false);
         if (sf == future) {
-            setKeepScreenOn(false);
             future = null;
+            handler.sendEmptyMessage(MSG_PLAY_FINISHED);
+            try { setKeepScreenOn(false); } catch (Exception e) {}
         }
-        handler.sendEmptyMessage(MSG_PLAY_FINISHED);
     }
 }

@@ -52,14 +52,7 @@ public class RsvpService extends Service implements
             Log.i(TAG, "Incoming chat action:'"+action+"' message:"+message);
             try {
                 JSONObject json = new JSONObject(message);
-                long id = json.optLong("id");
-                boolean own = json.optBoolean("own");
-                long timestamp = json.optLong("timestamp");
-                String receiver = json.optString("receiver");
-                String sender = json.optString("sender");
-                String status = json.optString("status");
-                String text = json.optString("text");
-                requestPlay("message: "+status+" text: "+text);
+                requestChat(json);
             } catch (JSONException e) {
                 Log.e(TAG, "mesage decode error", e);
             }
@@ -93,7 +86,7 @@ public class RsvpService extends Service implements
                 return "true";
             }
             else if ("stop".equals(action)) {
-                requestPlay((String)null);
+                requestPlay(null);
                 return "true";
             }
             else if ("chat-connect".equals(action)) {
@@ -209,30 +202,30 @@ public class RsvpService extends Service implements
         return bestNodeId;
     }
 
-    final void requestPlay(String text) {
-        String nodeId = pickBestNodeId();
-        if (nodeId == null)
-            return;
-        JSONObject json = new JSONObject();
-        try {
-            json.put("action", "play");
-            if (text != null)
-                json.put("text", text);
-        } catch (JSONException e) {}
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, json.toString().getBytes(utf8));
-    }
-
     final void requestPlay(SSect sect) {
         String nodeId = pickBestNodeId();
         if (nodeId == null)
             return;
         JSONObject json = new JSONObject();
         try {
-            json.put("action", "play");
-            if (sect != null)
+            if (sect == null) {
+                json.put("action", "stop");
+            } else {
+                json.put("action", "sect");
                 sect.fillJson(json);
+            }
         } catch (JSONException e) {}
         Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, json.toString().getBytes(utf8));
+    }
+
+    final void requestChat(JSONObject message) {
+        String nodeId = pickBestNodeId();
+        if (nodeId == null || message == null || message == JSONObject.NULL)
+            return;
+        try {
+            message.put("action", "chat");
+        } catch (JSONException e) {}
+        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, message.toString().getBytes(utf8));
     }
 
     @Override

@@ -55,7 +55,7 @@ public class SoundRecorder {
     private AsyncTask<Void, Void, Void> mRecordingAsyncTask;
     private AsyncTask<Void, Void, Void> mPlayingAsyncTask;
 
-    enum State {
+    public enum State {
         IDLE, RECORDING, PLAYING
     }
 
@@ -65,6 +65,10 @@ public class SoundRecorder {
         mListener = listener;
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         mContext = context;
+    }
+
+    public State getState() {
+        return mState;
     }
 
     /**

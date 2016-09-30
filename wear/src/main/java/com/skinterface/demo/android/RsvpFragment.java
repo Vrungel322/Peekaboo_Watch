@@ -3,18 +3,16 @@ package com.skinterface.demo.android;
 import android.Manifest;
 import android.app.Activity;
 import android.app.Fragment;
-import android.media.AudioFormat;
-import android.media.AudioRecord;
+import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.GestureDetector;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
-
-import java.io.File;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static com.skinterface.demo.android.WearActivity.TAG;
@@ -23,7 +21,9 @@ public class RsvpFragment extends Fragment implements
         RsvpView.RsvpViewListener,
         View.OnClickListener,
         View.OnTouchListener,
-        SoundRecorder.OnVoicePlaybackStateChangedListener
+        SoundRecorder.OnVoicePlaybackStateChangedListener,
+        GestureDetector.OnGestureListener,
+        GestureDetector.OnDoubleTapListener
 {
     private static final int STATE_INIT    = 0;
     private static final int STATE_DONE    = 1;
@@ -32,7 +32,10 @@ public class RsvpFragment extends Fragment implements
     private static final int STATE_CHILD   = 4;
 
     RsvpView mRsvpView;
-    TextView tvNextText;
+    TextView mPositionView;
+    View mRecordView;
+
+    Rect rect = new Rect();
 
     SSect sect;
     RsvpWords words;
@@ -43,10 +46,12 @@ public class RsvpFragment extends Fragment implements
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle saved) {
         View view = inflater.inflate(R.layout.fr_rsvp_round, container, false);
         view.findViewById(R.id.record).setOnTouchListener(this);
+        view.findViewById(R.id.rsvp).setOnTouchListener(this);
         view.findViewById(R.id.next).setOnClickListener(this);
-        tvNextText = (TextView) view.findViewById(R.id.next_text);
         mRsvpView = (RsvpView) view.findViewById(R.id.rsvp);
         mRsvpView.setListener(this);
+        mPositionView = (TextView) view.findViewById(R.id.position);
+        mRecordView = view.findViewById(R.id.record);
         return view;
     }
 
@@ -70,8 +75,8 @@ public class RsvpFragment extends Fragment implements
         this.words = null;
         if (mRsvpView != null)
             mRsvpView.stop(null);
-        if (tvNextText != null)
-            tvNextText.setText("");
+        if (mPositionView != null)
+            mPositionView.setText("");
     }
 
     private void onNext() {
@@ -80,7 +85,7 @@ public class RsvpFragment extends Fragment implements
         if (sect == null) {
             state = STATE_DONE;
             mRsvpView.stop(null);
-            tvNextText.setText("");
+            mPositionView.setText("");
             return;
         }
         if (state == STATE_INIT || state == STATE_DONE) {
@@ -90,12 +95,12 @@ public class RsvpFragment extends Fragment implements
             words.addTitleWords(sect.title);
             words.addIntroWords(sect.descr);
             mRsvpView.play(words);
+            String p = "|T|";
             if (sect.hasArticle)
-                tvNextText.setText("A");
-            else if (sect.children != null && sect.children.length > 0)
-                tvNextText.setText("L");
-            else
-                tvNextText.setText("");
+                p += ">A";
+            if (sect.children != null && sect.children.length > 0)
+                p += ">"+sect.children.length;
+            mPositionView.setText(p);
             return;
         }
         if (state == STATE_TITLE) {
@@ -105,10 +110,10 @@ public class RsvpFragment extends Fragment implements
                 words = new RsvpWords();
                 words.addArticleWords(sect.entity);
                 mRsvpView.play(words);
+                String p = "T|A|";
                 if (sect.children != null && sect.children.length > 0)
-                    tvNextText.setText("L");
-                else
-                    tvNextText.setText("");
+                    p += ">"+sect.children.length;
+                mPositionView.setText(p);
                 return;
             }
         }
@@ -121,10 +126,12 @@ public class RsvpFragment extends Fragment implements
                 words.addTitleWords(child.title);
                 words.addIntroWords(child.descr);
                 mRsvpView.play(words);
+                String p = sect.hasArticle ? "TA|" : "T|";
                 if (sect.children.length > 1)
-                    tvNextText.setText(Integer.toString(sect.children.length-1));
+                    p += "1>"+(sect.children.length-1);
                 else
-                    tvNextText.setText("");
+                    p += "0";
+                mPositionView.setText(p);
                 return;
             } else {
                 state = STATE_DONE;
@@ -139,10 +146,9 @@ public class RsvpFragment extends Fragment implements
                 words.addTitleWords(child.title);
                 words.addIntroWords(child.descr);
                 mRsvpView.play(words);
-                if (sect.children.length > pos+1)
-                    tvNextText.setText(Integer.toString(sect.children.length-pos-1));
-                else
-                    tvNextText.setText("");
+                String p = sect.hasArticle ? "TA|" : "T|";
+                p += pos+">"+(sect.children.length-1);
+                mPositionView.setText(p);
                 return;
             }
         }
@@ -155,6 +161,7 @@ public class RsvpFragment extends Fragment implements
 
     @Override
     public void onRsvpPlayStop() {
+        mRsvpView.playIcons();
     }
 
     @Override
@@ -166,7 +173,8 @@ public class RsvpFragment extends Fragment implements
 
     @Override
     public boolean onTouch(View v, MotionEvent event) {
-        if (v.getId() != R.id.record)
+        int id = v.getId();
+        if (!(id == R.id.record || id == R.id.rsvp))
             return false;
         switch (event.getActionMasked()) {
         case MotionEvent.ACTION_DOWN:
@@ -189,7 +197,11 @@ public class RsvpFragment extends Fragment implements
             }
         }
         try {
-            recorder = new SoundRecorder(getActivity(), "voice.raw", this);
+            if (recorder != null) {
+                if (recorder.getState() != SoundRecorder.State.IDLE)
+                    return;
+                recorder = new SoundRecorder(getActivity(), "voice.raw", this);
+            }
             recorder.startRecording();
         } catch (Exception e) {
             Log.e(TAG, "Error on voice recording", e);
@@ -205,7 +217,6 @@ public class RsvpFragment extends Fragment implements
 
     @Override
     public void onRecordingStopped() {
-        recorder.startPlay();
         Activity activity = getActivity();
         if (activity instanceof WearActivity)
             ((WearActivity)activity).sendVoice("voice.raw");
@@ -213,5 +224,59 @@ public class RsvpFragment extends Fragment implements
 
     @Override
     public void onPlaybackStopped() {
+    }
+
+    @Override
+    public boolean onDown(MotionEvent event) {
+        Log.d(TAG,"onDown: " + event.toString());
+        return true;
+    }
+
+    @Override
+    public boolean onFling(MotionEvent event1, MotionEvent event2,
+                           float velocityX, float velocityY) {
+        Log.d(TAG, "onFling: " + event1.toString()+event2.toString());
+        return true;
+    }
+
+    @Override
+    public void onLongPress(MotionEvent event) {
+        Log.d(TAG, "onLongPress: " + event.toString());
+    }
+
+    @Override
+    public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX,
+                            float distanceY) {
+        Log.d(TAG, "onScroll: " + e1.toString()+e2.toString());
+        return true;
+    }
+
+    @Override
+    public void onShowPress(MotionEvent event) {
+        Log.d(TAG, "onShowPress: " + event.toString());
+    }
+
+    @Override
+    public boolean onSingleTapUp(MotionEvent event) {
+        Log.d(TAG, "onSingleTapUp: " + event.toString());
+        return true;
+    }
+
+    @Override
+    public boolean onDoubleTap(MotionEvent event) {
+        Log.d(TAG, "onDoubleTap: " + event.toString());
+        return true;
+    }
+
+    @Override
+    public boolean onDoubleTapEvent(MotionEvent event) {
+        Log.d(TAG, "onDoubleTapEvent: " + event.toString());
+        return true;
+    }
+
+    @Override
+    public boolean onSingleTapConfirmed(MotionEvent event) {
+        Log.d(TAG, "onSingleTapConfirmed: " + event.toString());
+        return true;
     }
 }

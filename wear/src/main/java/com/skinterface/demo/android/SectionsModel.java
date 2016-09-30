@@ -1,5 +1,7 @@
 package com.skinterface.demo.android;
 
+import java.util.Collections;
+import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 public class SectionsModel {
@@ -39,6 +41,10 @@ public class SectionsModel {
 
     public SSect last() {
         return sections.get(sections.size()-1);
+    }
+
+    public List<SSect> getSections() {
+        return Collections.unmodifiableList(sections);
     }
 
 }

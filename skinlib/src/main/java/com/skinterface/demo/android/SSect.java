@@ -24,6 +24,8 @@ class SSect {
 
     int currListPosition;
     SSect returnUp;
+    long chatId;
+    long chatTimestamp;
 
     SSect getCurrChild() {
         if (children == null || currListPosition < 0 || currListPosition >= children.length)

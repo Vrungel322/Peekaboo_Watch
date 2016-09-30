@@ -11,6 +11,9 @@ import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
 import com.google.android.gms.wearable.WearableListenerService;
 
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.nio.charset.Charset;
 import java.util.Map;
 import java.util.Set;
@@ -33,13 +36,10 @@ public class RsvpMessageService extends WearableListenerService {
                 return;
             String json = new String(msg.getData(), utf8);
             Log.i(TAG, "request: "+json);
-            SSect sect = SSect.fromJson(json);
-            if (sect != null) {
-                Intent startIntent = new Intent(this, WearActivity.class);
-                startIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                startIntent.putExtra("RSVP_SECT", json);
-                startActivity(startIntent);
-            }
+            Intent startIntent = new Intent(this, WearActivity.class);
+            startIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            startIntent.putExtra("RSVP_MESSAGE", json);
+            startActivity(startIntent);
             return;
         }
         super.onMessageReceived(msg);

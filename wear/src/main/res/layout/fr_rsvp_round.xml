@@ -4,6 +4,15 @@
              android:layout_height="match_parent"
              xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <TextView
+        android:id="@+id/position"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|top"
+        android:layout_marginTop="32dp"
+        android:typeface="monospace"
+        android:text="15:25" />
+
     <com.skinterface.demo.android.RsvpView
         android:id="@+id/rsvp"
         android:layout_width="match_parent"
@@ -16,40 +25,32 @@
         android:layout_width="wrap_content"
         android:layout_height="48dp"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="42dp"
+        android:layout_marginBottom="36dp"
         >
 
+        <android.support.wearable.view.CircularButton
+            android:id="@+id/prev"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            app:imageScaleMode="center"
+            android:src="@drawable/ic_arrow_back_black_48dp"
+            />
         <android.support.wearable.view.CircularButton
             android:id="@+id/record"
             android:layout_width="48dp"
             android:layout_height="48dp"
+            android:layout_marginLeft="16dp"
+            android:layout_marginRight="16dp"
             app:imageScaleMode="center"
             android:src="@drawable/ic_mic_black_48dp"
             />
-        <FrameLayout
+        <android.support.wearable.view.CircularButton
+            android:id="@+id/next"
             android:layout_width="48dp"
-            android:layout_height="48dp">
-            <android.support.wearable.view.CircularButton
-                android:id="@+id/next"
-                android:layout_width="48dp"
-                android:layout_height="48dp"
-                app:imageScaleMode="center"
-                android:src="@drawable/ic_forward_black_48dp"
-                />
-            <TextView
-                android:id="@+id/next_text"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_gravity="center"
-                android:text="10"
-                android:textSize="16sp"
-                android:textColor="@color/white"
-                android:shadowColor="@color/green"
-                android:shadowRadius="6"
-                android:shadowDx="2"
-                android:shadowDy="2"
-                />
-        </FrameLayout>
+            android:layout_height="48dp"
+            app:imageScaleMode="center"
+            android:src="@drawable/ic_arrow_forward_black_48dp"
+            />
     </LinearLayout>
 
 </FrameLayout>

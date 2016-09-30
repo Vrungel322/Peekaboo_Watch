@@ -10,20 +10,16 @@
     tools:deviceIds="wear">
 
     <TextView
-        android:id="@+id/text"
+        android:id="@+id/title"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginTop="16dp"
         android:layout_gravity="center_horizontal|top"
-        android:text="@string/hello_world" />
+        android:text="UpStars" />
 
-    <TextView
-        android:id="@+id/clock"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal|top"
-        android:layout_marginTop="32dp"
-        android:typeface="monospace"
-        android:text="15:25" />
+    <fragment android:name="com.skinterface.demo.android.RsvpFragment"
+              android:id="@+id/fr_rsvp"
+              android:layout_width="match_parent"
+              android:layout_height="match_parent" />
 
 </FrameLayout>

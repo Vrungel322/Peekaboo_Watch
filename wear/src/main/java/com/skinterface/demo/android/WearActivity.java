@@ -2,44 +2,43 @@ package com.skinterface.demo.android;
 
 import android.content.Intent;
 import android.os.Bundle;
+import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.wearable.activity.WearableActivity;
 import android.util.Log;
+import android.view.GestureDetector;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.common.api.ResolvingResultCallbacks;
 import com.google.android.gms.common.api.ResultCallback;
-import com.google.android.gms.common.api.Status;
 import com.google.android.gms.wearable.CapabilityApi;
 import com.google.android.gms.wearable.CapabilityInfo;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
 
-import java.io.BufferedInputStream;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.nio.charset.Charset;
-import java.text.SimpleDateFormat;
-import java.util.Date;
-import java.util.Locale;
+import java.util.Arrays;
+import java.util.Comparator;
 import java.util.Set;
 
 public class WearActivity extends WearableActivity implements View.OnClickListener {
     public static final String TAG = "SkinterWatch";
 
-    private static final Charset utf8 = Charset.forName("UTF-8");
-
-    private static final SimpleDateFormat AMBIENT_DATE_FORMAT =
-            new SimpleDateFormat("HH:mm", Locale.US);
+    Handler handler = new Handler();
 
     private ViewGroup mContainerView;
-    private TextView mTextView;
-    private TextView mClockView;
+    private TextView mTitleView;
+    private GestureDetector mDetector;
 
     private Set<Node> mVoiceNodes;
     private GoogleApiClient mGoogleApiClient;
@@ -48,18 +47,11 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
-        setAmbientEnabled();
+//        setAmbientEnabled();
 
         mContainerView = (ViewGroup) findViewById(R.id.container);
-        mTextView = (TextView) findViewById(R.id.text);
-        mClockView = (TextView) findViewById(R.id.clock);
-
-        mTextView.setOnClickListener(this);
-        mClockView.setOnClickListener(this);
-
-        getFragmentManager().beginTransaction()
-                .add(android.R.id.content, new RsvpFragment(), "rsvp")
-                .commit();
+        mTitleView = (TextView) findViewById(R.id.title);
+        mTitleView.setOnClickListener(this);
 
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
@@ -96,6 +88,9 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
             }
         }, "rsvp_voice");
 
+        mDetector = new GestureDetector(this, getRsvpFragment(), handler);
+        mDetector.setOnDoubleTapListener(getRsvpFragment());
+
         onNewIntent(getIntent());
     }
 
@@ -105,7 +100,13 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     }
 
     public RsvpFragment getRsvpFragment() {
-        return (RsvpFragment)getFragmentManager().findFragmentByTag("rsvp");
+        return (RsvpFragment)getFragmentManager().findFragmentById(R.id.fr_rsvp);
+    }
+
+    @Override
+    public boolean onTouchEvent(MotionEvent event){
+        this.mDetector.onTouchEvent(event);
+        return super.onTouchEvent(event);
     }
 
     public void playCurrentSect() {
@@ -121,17 +122,105 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
         if (fr != null)
             fr.stop();
     }
+    public void mergeChatMessage(JSONObject jmsg) {
+        boolean own = jmsg.optBoolean("own");
+        String partner = own ? jmsg.optString("receiver") : jmsg.optString("sender");;
+        if (partner == null || partner.isEmpty())
+            return;
+        for (SSect sect : SectionsModel.instance.getSections()) {
+            if ("chat".equals(sect.entity.media) && partner.equals(sect.entity.name)) {
+                mergeChatMessage(jmsg, sect);
+                return;
+            }
+        }
+        SSect chat = new SSect();
+        chat.entity.media = "chat";
+        chat.entity.name = partner;
+        chat.title = new SEntity();
+        chat.title.media = "text";
+        chat.title.data = partner;
+        chat.hasChildren = true;
+        chat.children = new SSect[0];
+        SectionsModel.instance.addSection(chat);
+        mergeChatMessage(jmsg, chat);
+    }
+
+    public void mergeChatMessage(JSONObject jmsg, SSect chat) {
+        long id = jmsg.optLong("id");
+        boolean own = jmsg.optBoolean("own");
+        long timestamp = jmsg.optLong("timestamp");
+        String receiver = jmsg.optString("receiver");
+        String sender = jmsg.optString("sender");
+        String status = jmsg.optString("status");
+        String text = jmsg.optString("text");
+        // find this message in the chat
+        SSect msg = null;
+        if (chat.children != null) {
+            for (SSect old : chat.children) {
+                if (old.chatId == id) {
+                    msg = old;
+                    break;
+                }
+            }
+        } else {
+            chat.children = new SSect[0];
+        }
+        if (msg == null) {
+            msg = new SSect();
+            msg.entity.media = "chat-text-msg";
+            msg.entity.role = own ? "sent" : "recv";
+            msg.entity.name = status;
+            msg.title = new SEntity();
+            msg.title.media = "text";
+            msg.title.data = text;
+            msg.chatId = id;
+            msg.chatTimestamp = timestamp;
+            msg.padd("sender", sender);
+            msg.padd("receiver", receiver);
+            int len = chat.children.length;
+            SSect[] arr = Arrays.copyOf(chat.children, len+1);
+            arr[len] = msg;
+            Arrays.sort(arr, new Comparator<SSect>() {
+                @Override
+                public int compare(SSect msg1, SSect msg2) {
+                    if (msg1.chatTimestamp != msg2.chatTimestamp)
+                        return Long.compare(msg1.chatTimestamp, msg2.chatTimestamp);
+                    return Long.compare(msg1.chatId, msg2.chatId);
+                }
+            });
+            chat.children = arr;
+        } else {
+            msg.entity.name = status;
+            if (text != null && !text.isEmpty())
+                msg.title.data = text;
+        }
+        getRsvpFragment().play(chat);
+    }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
 
-        if (intent.hasExtra("RSVP_SECT")) {
-            SSect sect = SSect.fromJson(intent.getStringExtra("RSVP_SECT"));
-            if (sect != null) {
-                SectionsModel.instance.addSection(sect);
-                playCurrentSect();
+        if (intent.hasExtra("RSVP_MESSAGE")) {
+            try {
+                JSONObject jobj = new JSONObject(intent.getStringExtra("RSVP_MESSAGE"));
+                String action = jobj.optString("action");
+                if ("sect".equals(action)) {
+                    SSect sect = SSect.fromJson(jobj);
+                    if (sect != null) {
+                        SectionsModel.instance.addSection(sect);
+                        playCurrentSect();
+                    }
+                }
+                else if ("stop".equals(action)) {
+                    stopCurrentSect();
+                }
+                else if ("chat".equals(action)) {
+                    mergeChatMessage(jobj);
+                }
+            } catch (JSONException e) {
+                Log.e(TAG, "Bad json request", e);
             }
         } else {
             SSect sect = new SSect();
@@ -228,14 +317,14 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     private void updateDisplay() {
         if (isAmbient()) {
             mContainerView.setBackgroundColor(getResources().getColor(android.R.color.black));
-            mTextView.setTextColor(getResources().getColor(android.R.color.white));
-            mClockView.setVisibility(View.VISIBLE);
+            mTitleView.setTextColor(getResources().getColor(android.R.color.white));
 
-            mClockView.setText(AMBIENT_DATE_FORMAT.format(new Date()));
+//            mClockView.setVisibility(View.VISIBLE);
+//            mClockView.setText(AMBIENT_DATE_FORMAT.format(new Date()));
         } else {
             mContainerView.setBackground(null);
-            mTextView.setTextColor(getResources().getColor(android.R.color.black));
-            mClockView.setVisibility(View.GONE);
+            mTitleView.setTextColor(getResources().getColor(android.R.color.black));
+//            mClockView.setVisibility(View.GONE);
         }
     }
 

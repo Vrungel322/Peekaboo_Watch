@@ -1,16 +1,23 @@
 package com.skinterface.demo.android;
 
+import android.Manifest;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.Typeface;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
+import android.speech.tts.TextToSpeech;
+import android.speech.tts.UtteranceProgressListener;
+import android.speech.tts.Voice;
+import android.support.annotation.RequiresApi;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
 import android.support.v7.app.AlertDialog;
@@ -37,6 +44,10 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
+import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -50,8 +61,11 @@ import java.util.LinkedList;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
+import java.util.Set;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
 public class MainActivity extends AppCompatActivity implements View.OnClickListener, Action.ActionExecutor
 {
@@ -259,6 +273,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
         if (id == R.id.sf_return_up) {
             executeAction(new Action("return-up"));
+            return true;
+        }
+        if (id == R.id.run_tts) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+                runTTS();
             return true;
         }
 
@@ -959,6 +978,108 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         public int getItemCount() {
             return mSect.children.length;
         }
+    }
+
+    boolean permissionChecked;
+    TextToSpeech tts;
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    public void runTTS() {
+        if (Looper.getMainLooper().getThread() != Thread.currentThread()) {
+            handler.post(new Runnable() {
+                @Override
+                public void run() {
+                    runTTS();
+                }
+            });
+            return;
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !permissionChecked) {
+            int res = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            if (res != PERMISSION_GRANTED) {
+                requestPermissions(new String[]{
+                        Manifest.permission.READ_EXTERNAL_STORAGE,
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE
+                }, 1);
+                return;
+            }
+            permissionChecked = true;
+        }
+        if (tts == null) {
+            setStatus("Starting TTS");
+            tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
+                @Override
+                public void onInit(int status) {
+                    if (tts.setLanguage(new Locale("en")) < tts.LANG_AVAILABLE)
+                        throw new RuntimeException("TTS languagre not supported");
+                    Set<Voice> voices = tts.getVoices();
+                    for (Voice v : voices) {
+                        //Log.i(TAG, "TTS Voice: " + v);
+                        if (v.getName().equals("en-GB-fis-network")) // en-US-sfg-network en-GB-fis-network
+                            tts.setVoice(v);
+                    }
+                    runTTS();
+                }
+            });
+            return;
+        }
+        // list TTS files
+        File dir = new File(Environment.getExternalStorageDirectory(), "TTS");
+        for (String fname : dir.list()) {
+            if (fname.endsWith("en.txt")) {
+                try {
+                    setStatus(fname);
+                    BufferedReader rd = new BufferedReader(new InputStreamReader(new FileInputStream(new File(dir, fname)), "UTF-8"));
+                    ArrayList<String> sentences = new ArrayList<>();
+                    String line;
+                    StringBuilder sb = new StringBuilder();
+                    while ((line=rd.readLine()) != null) {
+                        if (line.isEmpty())
+                            continue;
+                        sentences.add(line);
+                        sb.append(line).append('\n');
+                    }
+                    tvText.setText(sb.toString());
+                    generateTTSFiles(fname.substring(0, fname.length()-4), sentences, 0);
+                    return;
+                } catch (IOException e) {
+                    Log.e(TAG, "Error reading text file for TTS: "+fname, e);
+                }
+            }
+        }
+        // shutdown TTS
+        setStatus("Shutdown TTS");
+        tvText.setText("");
+        tts.shutdown();
+        tts = null;
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+    private void generateTTSFiles(final String fname, final ArrayList<String> list, final int pos) {
+        final File dir = new File(Environment.getExternalStorageDirectory(), "TTS");
+        if (pos >= list.size()) {
+            new File(dir, fname+".txt").delete();
+            runTTS();
+            return;
+        }
+        final File file = new File(dir, fname + "."+pos+".wav");
+        tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+            @Override
+            public void onStart(String utteranceId) {
+            }
+            @Override
+            public void onDone(String utteranceId) {
+                generateTTSFiles(fname, list, pos+1);
+            }
+            @Override
+            public void onError(String utteranceId) {
+                file.delete();
+                generateTTSFiles(fname, list, pos+1);
+            }
+        });
+        Bundle params = new Bundle();
+        params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "#"+pos);
+        tts.synthesizeToFile(list.get(pos), null, file, "#"+pos);
+        //tts.speak(list.get(pos), tts.QUEUE_ADD, params, "#"+pos);
     }
 
 }

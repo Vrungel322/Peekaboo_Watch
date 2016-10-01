@@ -3,9 +3,12 @@ package com.skinterface.demo.android;
 import android.Manifest;
 import android.app.Activity;
 import android.app.Fragment;
-import android.graphics.Rect;
+import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
+import android.text.Spannable;
+import android.text.SpannableStringBuilder;
+import android.text.style.StyleSpan;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.LayoutInflater;
@@ -35,8 +38,6 @@ public class RsvpFragment extends Fragment implements
     TextView mPositionView;
     View mRecordView;
 
-    Rect rect = new Rect();
-
     SSect sect;
     RsvpWords words;
     int state;
@@ -48,6 +49,7 @@ public class RsvpFragment extends Fragment implements
         view.findViewById(R.id.record).setOnTouchListener(this);
         view.findViewById(R.id.rsvp).setOnTouchListener(this);
         view.findViewById(R.id.next).setOnClickListener(this);
+        view.findViewById(R.id.prev).setOnClickListener(this);
         mRsvpView = (RsvpView) view.findViewById(R.id.rsvp);
         mRsvpView.setListener(this);
         mPositionView = (TextView) view.findViewById(R.id.position);
@@ -63,6 +65,8 @@ public class RsvpFragment extends Fragment implements
     }
 
     public void play(SSect sect) {
+        if (this.sect == sect)
+            return;
         this.state = STATE_INIT;
         this.sect = sect;
         this.words = null;
@@ -71,12 +75,57 @@ public class RsvpFragment extends Fragment implements
 
     public void stop() {
         this.state = STATE_DONE;
-        this.sect = null;
+        //this.sect = null;
         this.words = null;
         if (mRsvpView != null)
             mRsvpView.stop(null);
         if (mPositionView != null)
             mPositionView.setText("");
+    }
+
+    private void updatePosView(boolean playing) {
+        if (mRsvpView == null)
+            return;
+        if (sect == null) {
+            mPositionView.setText("");
+            return;
+        }
+        SpannableStringBuilder sb = new SpannableStringBuilder();
+        sb.append("*T*");
+        if (sect.hasArticle)
+            sb.append("A*");
+        switch (state) {
+        case STATE_INIT:
+            sb.setSpan(new StyleSpan(Typeface.BOLD), 0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            break;
+        case STATE_DONE:
+            sb.setSpan(new StyleSpan(Typeface.BOLD), sb.length()-1, sb.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            break;
+        case STATE_TITLE:
+            if (playing)
+                sb.setSpan(new StyleSpan(Typeface.BOLD), 1, 2, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            else
+                sb.setSpan(new StyleSpan(Typeface.BOLD), 2, 3, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            break;
+        case STATE_ARTICLE:
+            if (playing)
+                sb.setSpan(new StyleSpan(Typeface.BOLD), 3, 4, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            else
+                sb.setSpan(new StyleSpan(Typeface.BOLD), 4, 5, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+            break;
+        }
+        if (sect.children != null && sect.children.length > 0) {
+            int cnt = sect.children.length;
+            int pos = state - STATE_CHILD;
+            if (pos < 0) { pos = -1; playing = false; }
+            if (pos >= cnt) { pos = cnt-1; }
+            if (playing) {
+                sb.insert(sb.length()-1, "*"+pos+"<1>"+(cnt-pos-1));
+            } else {
+                sb.insert(sb.length()-1, "*"+(pos+1)+"<:>"+(cnt-pos-1));
+            }
+        }
+        mPositionView.setText(sb);
     }
 
     private void onNext() {
@@ -95,12 +144,6 @@ public class RsvpFragment extends Fragment implements
             words.addTitleWords(sect.title);
             words.addIntroWords(sect.descr);
             mRsvpView.play(words);
-            String p = "|T|";
-            if (sect.hasArticle)
-                p += ">A";
-            if (sect.children != null && sect.children.length > 0)
-                p += ">"+sect.children.length;
-            mPositionView.setText(p);
             return;
         }
         if (state == STATE_TITLE) {
@@ -110,10 +153,6 @@ public class RsvpFragment extends Fragment implements
                 words = new RsvpWords();
                 words.addArticleWords(sect.entity);
                 mRsvpView.play(words);
-                String p = "T|A|";
-                if (sect.children != null && sect.children.length > 0)
-                    p += ">"+sect.children.length;
-                mPositionView.setText(p);
                 return;
             }
         }
@@ -126,19 +165,13 @@ public class RsvpFragment extends Fragment implements
                 words.addTitleWords(child.title);
                 words.addIntroWords(child.descr);
                 mRsvpView.play(words);
-                String p = sect.hasArticle ? "TA|" : "T|";
-                if (sect.children.length > 1)
-                    p += "1>"+(sect.children.length-1);
-                else
-                    p += "0";
-                mPositionView.setText(p);
                 return;
             } else {
                 state = STATE_DONE;
             }
         }
         if (state >= STATE_CHILD) {
-            int pos = 1 + state - STATE_CHILD;
+            int pos = state - STATE_CHILD + 1;
             if (pos < sect.children.length) {
                 state = STATE_CHILD + pos;
                 SSect child = sect.children[pos];
@@ -146,28 +179,69 @@ public class RsvpFragment extends Fragment implements
                 words.addTitleWords(child.title);
                 words.addIntroWords(child.descr);
                 mRsvpView.play(words);
-                String p = sect.hasArticle ? "TA|" : "T|";
-                p += pos+">"+(sect.children.length-1);
-                mPositionView.setText(p);
-                return;
             }
+            return;
         }
         state = STATE_DONE;
     }
 
+    private void onPrev() {
+        if (mRsvpView == null)
+            return;
+        if (sect == null) {
+            state = STATE_DONE;
+            mRsvpView.stop(null);
+            mPositionView.setText("");
+            return;
+        }
+
+        if (state > STATE_CHILD) {
+            int pos = state - STATE_CHILD - 1;
+            if (pos >= sect.children.length)
+                pos = sect.children.length - 1;
+            if (pos >= 0) {
+                state = STATE_CHILD + pos;
+                SSect child = sect.children[pos];
+                words = new RsvpWords();
+                words.addTitleWords(child.title);
+                words.addIntroWords(child.descr);
+                mRsvpView.play(words);
+                return;
+            }
+            state = STATE_CHILD;
+        }
+        if (state == STATE_CHILD || state == STATE_ARTICLE) {
+            // show title & description
+            state = STATE_TITLE;
+            words = new RsvpWords();
+            words.addTitleWords(sect.title);
+            words.addIntroWords(sect.descr);
+            mRsvpView.play(words);
+            return;
+        }
+        state = STATE_INIT;
+        mRsvpView.stop(null);
+        updatePosView(false);
+        return;
+    }
+
     @Override
     public void onRsvpPlayStart() {
+        updatePosView(true);
     }
 
     @Override
     public void onRsvpPlayStop() {
-        mRsvpView.playIcons();
+        updatePosView(false);
     }
 
     @Override
     public void onClick(View v) {
         if (v.getId() == R.id.next) {
             onNext();
+        }
+        else if (v.getId() == R.id.prev) {
+            onPrev();
         }
     }
 
@@ -200,6 +274,7 @@ public class RsvpFragment extends Fragment implements
             if (recorder != null) {
                 if (recorder.getState() != SoundRecorder.State.IDLE)
                     return;
+            } else {
                 recorder = new SoundRecorder(getActivity(), "voice.raw", this);
             }
             recorder.startRecording();

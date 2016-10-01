@@ -75,7 +75,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     final static Charset utf8 = Charset.forName("UTF-8");
 
     static final int CAPS = 0;
-    static final String JSON_URL = "http://192.168.2.157:8080/UpStars/Service";
+    static final String JSON_URL = "http://u-com.pro/UpStars/Service";
+    //static final String JSON_URL = "http://192.168.2.157:8080/UpStars/Service";
 
     final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     final Handler handler = new Handler(Looper.getMainLooper());

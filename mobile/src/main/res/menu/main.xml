@@ -34,7 +34,6 @@
             />
     </group>
     <item android:title="Process TTS files"
-          android:visible="false"
           android:id="@+id/run_tts"
         />
 </menu>

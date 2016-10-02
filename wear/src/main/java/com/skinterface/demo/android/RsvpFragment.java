@@ -6,6 +6,8 @@ import android.app.Fragment;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Message;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.style.StyleSpan;
@@ -17,43 +19,84 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
+import java.io.File;
+
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static com.skinterface.demo.android.WearActivity.TAG;
 
 public class RsvpFragment extends Fragment implements
-        RsvpView.RsvpViewListener,
         View.OnClickListener,
-        View.OnTouchListener,
-        SoundRecorder.OnVoicePlaybackStateChangedListener,
         GestureDetector.OnGestureListener,
         GestureDetector.OnDoubleTapListener
 {
+    private static final String VOICE_FILE_NAME = "voice.wav";
+
     private static final int STATE_INIT    = 0;
     private static final int STATE_DONE    = 1;
     private static final int STATE_TITLE   = 2;
     private static final int STATE_ARTICLE = 3;
     private static final int STATE_CHILD   = 4;
 
+    static final int MSG_RSVP_PLAY_STARTED  = 1;
+    static final int MSG_RSVP_PLAY_FINISHED = 2;
+
+    static final int MSG_SOUND_PLAY_FAIL    = 10;
+    static final int MSG_SOUND_PLAY_STARTED = 11;
+    static final int MSG_SOUND_PLAY_FINISHED= 12;
+    static final int MSG_SOUND_REC_FAIL     = 13;
+    static final int MSG_SOUND_REC_STARTED  = 14;
+    static final int MSG_SOUND_REC_PROGRESS = 15;
+    static final int MSG_SOUND_REC_FINISHED = 16;
+
+    final Handler handler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+            case MSG_RSVP_PLAY_STARTED:
+                onRsvpPlayStart();
+                break;
+            case MSG_RSVP_PLAY_FINISHED:
+                onRsvpPlayStop();
+                break;
+            case MSG_SOUND_PLAY_STARTED:
+                break;
+            case MSG_SOUND_PLAY_FINISHED:
+                break;
+            case MSG_SOUND_REC_FAIL:
+                onSoundRecFail();
+                break;
+            case MSG_SOUND_REC_STARTED:
+                onSoundRecStart();
+                break;
+            case MSG_SOUND_REC_PROGRESS:
+                onSoundRecProgress(msg.arg1, msg.arg2);
+                break;
+            case MSG_SOUND_REC_FINISHED:
+                onSoundRecStop(msg.arg1, msg.arg2);
+                break;
+            }
+        }
+    };
+
     RsvpView mRsvpView;
     TextView mPositionView;
-    View mRecordView;
 
     SSect sect;
     RsvpWords words;
     int state;
     SoundRecorder recorder;
+    boolean recording;
+    int recording_time;
+    int recording_size;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle saved) {
         View view = inflater.inflate(R.layout.fr_rsvp_round, container, false);
-        view.findViewById(R.id.record).setOnTouchListener(this);
-        view.findViewById(R.id.rsvp).setOnTouchListener(this);
         view.findViewById(R.id.next).setOnClickListener(this);
         view.findViewById(R.id.prev).setOnClickListener(this);
         mRsvpView = (RsvpView) view.findViewById(R.id.rsvp);
-        mRsvpView.setListener(this);
+        mRsvpView.setListener(handler);
         mPositionView = (TextView) view.findViewById(R.id.position);
-        mRecordView = view.findViewById(R.id.record);
         return view;
     }
 
@@ -86,6 +129,11 @@ public class RsvpFragment extends Fragment implements
     private void updatePosView(boolean playing) {
         if (mRsvpView == null)
             return;
+        if (recording) {
+            String txt = String.format("%1$tM:%1$tS %2$1.2fmb ", (long)recording_time, recording_size / (float)(1024*1024));
+            mPositionView.setText(txt);
+            return;
+        }
         if (sect == null) {
             mPositionView.setText("");
             return;
@@ -225,13 +273,41 @@ public class RsvpFragment extends Fragment implements
         return;
     }
 
-    @Override
     public void onRsvpPlayStart() {
         updatePosView(true);
     }
 
-    @Override
     public void onRsvpPlayStop() {
+        updatePosView(false);
+    }
+
+    public void onSoundRecFail() {
+        recording = false;
+        recording_time = 0;
+        if (getActivity() != null)
+            new File(getActivity().getFilesDir(), VOICE_FILE_NAME).delete();
+    }
+
+    public void onSoundRecStart() {
+        recording = true;
+        recording_time = 0;
+        updatePosView(false);
+    }
+
+    private void onSoundRecProgress(int millis, int size) {
+        recording_time = millis;
+        recording_size = size;
+        Log.i(TAG, "recording "+millis+" ms / "+size+" bytes");
+        updatePosView(false);
+    }
+
+    public void onSoundRecStop(int millis, int size) {
+        recording = false;
+        recording_time = millis;
+        recording_size = size;
+        Activity activity = getActivity();
+        if (activity instanceof WearActivity)
+            ((WearActivity)activity).sendVoice(VOICE_FILE_NAME);
         updatePosView(false);
     }
 
@@ -243,23 +319,6 @@ public class RsvpFragment extends Fragment implements
         else if (v.getId() == R.id.prev) {
             onPrev();
         }
-    }
-
-    @Override
-    public boolean onTouch(View v, MotionEvent event) {
-        int id = v.getId();
-        if (!(id == R.id.record || id == R.id.rsvp))
-            return false;
-        switch (event.getActionMasked()) {
-        case MotionEvent.ACTION_DOWN:
-            startRecordVoice();
-            break;
-        case MotionEvent.ACTION_UP:
-        case MotionEvent.ACTION_CANCEL:
-            stopRecordVoice();
-            break;
-        }
-        return true;
     }
 
     private void startRecordVoice() {
@@ -275,30 +334,12 @@ public class RsvpFragment extends Fragment implements
                 if (recorder.getState() != SoundRecorder.State.IDLE)
                     return;
             } else {
-                recorder = new SoundRecorder(getActivity(), "voice.raw", this);
+                recorder = new SoundRecorder(getActivity(), VOICE_FILE_NAME, this.handler);
             }
             recorder.startRecording();
         } catch (Exception e) {
             Log.e(TAG, "Error on voice recording", e);
         }
-    }
-    private void stopRecordVoice() {
-        try {
-            recorder.stopRecording();
-        } catch (Exception e) {
-            Log.e(TAG, "Error on voice recording", e);
-        }
-    }
-
-    @Override
-    public void onRecordingStopped() {
-        Activity activity = getActivity();
-        if (activity instanceof WearActivity)
-            ((WearActivity)activity).sendVoice("voice.raw");
-    }
-
-    @Override
-    public void onPlaybackStopped() {
     }
 
     @Override
@@ -307,9 +348,19 @@ public class RsvpFragment extends Fragment implements
         return true;
     }
 
+    public void onUpOrCancel(boolean cancel) {
+        Log.d(TAG,"onUpOrCancel: cancel="+cancel);
+        if (recording) {
+            try {
+                recorder.stopRecording();
+            } catch (Exception e) {
+                Log.e(TAG, "Error on voice recording", e);
+            }
+        }
+    }
+
     @Override
-    public boolean onFling(MotionEvent event1, MotionEvent event2,
-                           float velocityX, float velocityY) {
+    public boolean onFling(MotionEvent event1, MotionEvent event2, float velX, float velY) {
         Log.d(TAG, "onFling: " + event1.toString()+event2.toString());
         return true;
     }
@@ -317,11 +368,18 @@ public class RsvpFragment extends Fragment implements
     @Override
     public void onLongPress(MotionEvent event) {
         Log.d(TAG, "onLongPress: " + event.toString());
+        int x = (int)event.getX();
+        int y = (int)event.getY();
+        int Cx = (mRsvpView.getLeft() + mRsvpView.getRight()) / 2;
+        int Cy = (mRsvpView.getTop() + mRsvpView.getBottom()) / 2;
+        int dx2 = (Cx -x)*(Cx - x);
+        int dy2 = (Cy -y)*(Cy - y);
+        if (dx2 < 50*50 && dy2 < 50*50)
+            startRecordVoice();
     }
 
     @Override
-    public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX,
-                            float distanceY) {
+    public boolean onScroll(MotionEvent e1, MotionEvent e2, float distanceX, float distanceY) {
         Log.d(TAG, "onScroll: " + e1.toString()+e2.toString());
         return true;
     }

@@ -5,8 +5,10 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.wearable.activity.WearableActivity;
+import android.support.wearable.view.DismissOverlayView;
 import android.util.Log;
 import android.view.GestureDetector;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
@@ -37,6 +39,7 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     Handler handler = new Handler();
 
     private ViewGroup mContainerView;
+    //private DismissOverlayView mDismissOverlay;
     private TextView mTitleView;
     private GestureDetector mDetector;
 
@@ -50,6 +53,11 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
 //        setAmbientEnabled();
 
         mContainerView = (ViewGroup) findViewById(R.id.container);
+
+        //mDismissOverlay = (DismissOverlayView) findViewById(R.id.dismiss_overlay);
+        //mDismissOverlay.setIntroText(R.string.long_press_intro);
+        //mDismissOverlay.showIntroIfNecessary();
+
         mTitleView = (TextView) findViewById(R.id.title);
         mTitleView.setOnClickListener(this);
 
@@ -99,13 +107,25 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
         startActivity(intent);
     }
 
+    @Override
+    public boolean onKeyDown(int keyCode, KeyEvent event) {
+        Log.i(TAG, "onKeyDown: " + keyCode + " : " + event);
+        return super.onKeyDown(keyCode, event);
+    }
+
     public RsvpFragment getRsvpFragment() {
         return (RsvpFragment)getFragmentManager().findFragmentById(R.id.fr_rsvp);
     }
 
     @Override
-    public boolean onTouchEvent(MotionEvent event){
-        this.mDetector.onTouchEvent(event);
+    public boolean onTouchEvent(MotionEvent event) {
+        boolean isCancel = event.getActionMasked() == MotionEvent.ACTION_CANCEL;
+        boolean isUp = event.getActionMasked() == MotionEvent.ACTION_UP;
+        boolean handled = mDetector.onTouchEvent(event);
+        if (isCancel)
+            getRsvpFragment().onUpOrCancel(true);
+        else if (!handled && isUp)
+            getRsvpFragment().onUpOrCancel(false);
         return super.onTouchEvent(event);
     }
 
@@ -351,6 +371,7 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
         return bestNodeId;
     }
 
+    // TODO: should use DataApi + Asset
     public void sendVoice(String fname) {
         String nodeId = pickBestNodeId();
         if (nodeId == null)

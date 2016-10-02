@@ -47,7 +47,6 @@ import org.json.JSONTokener;
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -56,6 +55,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Locale;
@@ -277,8 +277,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             return true;
         }
         if (id == R.id.run_tts) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                tts_text_files = null;
+                tts_lang = GEN_TTS_LANGS[0];
                 runTTS();
+            }
             return true;
         }
 
@@ -983,6 +986,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     boolean permissionChecked;
     TextToSpeech tts;
+    final String[] GEN_TTS_LANGS = {"ru", "en"};
+    File tts_dir;
+    ArrayList<String> tts_text_files;
+    String tts_lang;
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     public void runTTS() {
         if (Looper.getMainLooper().getThread() != Thread.currentThread()) {
@@ -1010,12 +1017,14 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
                 @Override
                 public void onInit(int status) {
-                    if (tts.setLanguage(new Locale("en")) < tts.LANG_AVAILABLE)
+                    if (tts.setLanguage(new Locale(tts_lang)) < tts.LANG_AVAILABLE)
                         throw new RuntimeException("TTS languagre not supported");
                     Set<Voice> voices = tts.getVoices();
                     for (Voice v : voices) {
-                        //Log.i(TAG, "TTS Voice: " + v);
-                        if (v.getName().equals("en-GB-fis-network")) // en-US-sfg-network en-GB-fis-network
+                        Log.i(TAG, "TTS Voice: " + v);
+                        if (tts_lang.equals("ru") && v.getName().equals("ru-RU-locale"))
+                            tts.setVoice(v);
+                        if (tts_lang.equals("en") && v.getName().equals("en-GB-fis-network")) // en-US-sfg-network en-GB-fis-network
                             tts.setVoice(v);
                     }
                     runTTS();
@@ -1024,27 +1033,34 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             return;
         }
         // list TTS files
-        File dir = new File(Environment.getExternalStorageDirectory(), "TTS");
-        for (String fname : dir.list()) {
-            if (fname.endsWith("en.txt")) {
-                try {
-                    setStatus(fname);
-                    BufferedReader rd = new BufferedReader(new InputStreamReader(new FileInputStream(new File(dir, fname)), "UTF-8"));
-                    ArrayList<String> sentences = new ArrayList<>();
-                    String line;
-                    StringBuilder sb = new StringBuilder();
-                    while ((line=rd.readLine()) != null) {
-                        if (line.isEmpty())
-                            continue;
-                        sentences.add(line);
-                        sb.append(line).append('\n');
-                    }
-                    tvText.setText(sb.toString());
-                    generateTTSFiles(fname.substring(0, fname.length()-4), sentences, 0);
-                    return;
-                } catch (IOException e) {
-                    Log.e(TAG, "Error reading text file for TTS: "+fname, e);
+        if (tts_text_files == null) {
+            tts_dir = new File(Environment.getExternalStorageDirectory(), "TTS");
+            tts_text_files = new ArrayList<>();
+            for (String fname : tts_dir.list()) {
+                if (fname.endsWith(tts_lang + ".txt"))
+                    tts_text_files.add(fname.substring(0, fname.length() - 4));
+            }
+        }
+        while (!tts_text_files.isEmpty()) {
+            String fname = tts_text_files.get(0);
+            try {
+                setStatus(fname);
+                BufferedReader rd = new BufferedReader(new InputStreamReader(
+                        new FileInputStream(new File(tts_dir, fname+".txt")), "UTF-8"));
+                ArrayList<String> sentences = new ArrayList<>();
+                String line;
+                StringBuilder sb = new StringBuilder();
+                while ((line = rd.readLine()) != null) {
+                    if (line.isEmpty())
+                        continue;
+                    sentences.add(line);
+                    sb.append(line).append('\n');
                 }
+                tvText.setText(sb.toString());
+                generateTTSFiles(fname, sentences, 0);
+                return;
+            } catch (IOException e) {
+                Log.e(TAG, "Error reading text file for TTS: " + fname+".txt", e);
             }
         }
         // shutdown TTS
@@ -1052,17 +1068,26 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         tvText.setText("");
         tts.shutdown();
         tts = null;
+        tts_text_files = null;
+
+        int i = Arrays.binarySearch(GEN_TTS_LANGS, tts_lang);
+        if (i+1 < GEN_TTS_LANGS.length) {
+            tts_lang = GEN_TTS_LANGS[i+1];
+            runTTS();
+        } else {
+            tts_lang = null;
+        }
     }
 
     @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
     private void generateTTSFiles(final String fname, final ArrayList<String> list, final int pos) {
-        final File dir = new File(Environment.getExternalStorageDirectory(), "TTS");
         if (pos >= list.size()) {
-            new File(dir, fname+".txt").delete();
+            new File(tts_dir, fname+".txt").delete();
+            tts_text_files.remove(fname);
             runTTS();
             return;
         }
-        final File file = new File(dir, fname + "."+pos+".wav");
+        final File file = new File(tts_dir, fname + "."+pos+".wav");
         tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
             @Override
             public void onStart(String utteranceId) {

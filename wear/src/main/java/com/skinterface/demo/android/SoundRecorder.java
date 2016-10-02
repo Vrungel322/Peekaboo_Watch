@@ -26,6 +26,7 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.util.Log;
 
 import java.io.BufferedInputStream;
@@ -51,7 +52,7 @@ public class SoundRecorder {
     private final Context mContext;
     private State mState = State.IDLE;
 
-    private OnVoicePlaybackStateChangedListener mListener;
+    private Handler mHandler;
     private AsyncTask<Void, Void, Void> mRecordingAsyncTask;
     private AsyncTask<Void, Void, Void> mPlayingAsyncTask;
 
@@ -59,10 +60,9 @@ public class SoundRecorder {
         IDLE, RECORDING, PLAYING
     }
 
-    public SoundRecorder(Context context, String outputFileName,
-                         OnVoicePlaybackStateChangedListener listener) {
+    public SoundRecorder(Context context, String outputFileName, Handler handler) {
         mOutputFileName = outputFileName;
-        mListener = listener;
+        mHandler = handler;
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         mContext = context;
     }
@@ -111,16 +111,28 @@ public class SoundRecorder {
                     return null;
                 BufferedOutputStream bufferedOutputStream = null;
                 try {
+                    long started = SystemClock.uptimeMillis();
+                    int written = 0;
                     bufferedOutputStream = new BufferedOutputStream(
                             mContext.openFileOutput(mOutputFileName, Context.MODE_PRIVATE));
                     byte[] buffer = new byte[BUFFER_SIZE];
                     mAudioRecord.startRecording();
+                    mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_REC_STARTED);
                     while (!isCancelled()) {
                         int read = mAudioRecord.read(buffer, 0, buffer.length);
                         bufferedOutputStream.write(buffer, 0, read);
+                        written += read;
+                        int millis = (int)(SystemClock.uptimeMillis() - started);
+                        mHandler.obtainMessage(RsvpFragment.MSG_SOUND_REC_PROGRESS,
+                                millis, written).sendToTarget();
                     }
+                    int finished = (int)(SystemClock.uptimeMillis() - started);
+                    bufferedOutputStream.close();
+                    mHandler.obtainMessage(RsvpFragment.MSG_SOUND_REC_FINISHED,
+                            finished, written, mOutputFileName).sendToTarget();
                 } catch (IOException | NullPointerException | IndexOutOfBoundsException e) {
                     Log.e(TAG, "Failed to record data: " + e);
+                    mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_REC_FAIL);
                 } finally {
                     if (bufferedOutputStream != null) {
                         try {
@@ -139,8 +151,6 @@ public class SoundRecorder {
             protected void onPostExecute(Void aVoid) {
                 mState = State.IDLE;
                 mRecordingAsyncTask = null;
-                if (mListener != null)
-                    mListener.onRecordingStopped();
             }
 
             @Override
@@ -149,8 +159,6 @@ public class SoundRecorder {
                 if (mState == State.RECORDING) {
                     Log.d(TAG, "Stopping the recording ...");
                     mState = State.IDLE;
-                    if (mListener != null)
-                        mListener.onRecordingStopped();
                 } else {
                     Log.w(TAG, "Requesting to stop recording while state was not RECORDING");
                 }
@@ -183,8 +191,7 @@ public class SoundRecorder {
 
         if (!new File(mContext.getFilesDir(), mOutputFileName).exists()) {
             // there is no recording to play
-            if (mListener != null)
-                mListener.onPlaybackStopped();
+            mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_PLAY_FAIL);
             return;
         }
         final int intSize = AudioTrack.getMinBufferSize(RECORDING_RATE, CHANNELS_OUT, FORMAT);
@@ -202,38 +209,29 @@ public class SoundRecorder {
 
             @Override
             protected Void doInBackground(Void... params) {
+                FileInputStream in = null;
                 try {
                     mAudioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, RECORDING_RATE,
                             CHANNELS_OUT, FORMAT, intSize, AudioTrack.MODE_STREAM);
                     byte[] buffer = new byte[intSize * 2];
-                    FileInputStream in = null;
-                    BufferedInputStream bis = null;
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
                         mAudioTrack.setVolume(AudioTrack.getMaxVolume() / 2);
                     mAudioTrack.play();
-                    try {
-                        in = mContext.openFileInput(mOutputFileName);
-                        bis = new BufferedInputStream(in);
-                        int read;
-                        while (!isCancelled() && (read = bis.read(buffer, 0, buffer.length)) > 0) {
-                            mAudioTrack.write(buffer, 0, read);
-                        }
-                    } catch (IOException e) {
-                        Log.e(TAG, "Failed to read the sound file into a byte array", e);
-                    } finally {
-                        try {
-                            if (in != null) {
-                                in.close();
-                            }
-                            if (bis != null) {
-                                bis.close();
-                            }
-                        } catch (IOException e) { /* ignore */}
-
-                        mAudioTrack.release();
+                    mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_PLAY_STARTED);
+                    in = mContext.openFileInput(mOutputFileName);
+                    BufferedInputStream bis = new BufferedInputStream(in);
+                    int read;
+                    while (!isCancelled() && (read = bis.read(buffer, 0, buffer.length)) > 0) {
+                        mAudioTrack.write(buffer, 0, read);
                     }
-                } catch (IllegalStateException e) {
-                    Log.e(TAG, "Failed to start playback", e);
+                    mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_PLAY_FINISHED);
+                } catch (Exception e) {
+                    Log.e(TAG, "Failed to playback", e);
+                    mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_PLAY_FAIL);
+                } finally {
+                    IOUtils.safeClose(in);
+                    if (mAudioTrack != null)
+                        mAudioTrack.release();
                 }
                 return null;
             }
@@ -249,19 +247,12 @@ public class SoundRecorder {
             }
 
             private void cleanup() {
-                if (mListener != null)
-                    mListener.onPlaybackStopped();
                 mState = State.IDLE;
                 mPlayingAsyncTask = null;
             }
         };
 
         mPlayingAsyncTask.execute();
-    }
-
-    public interface OnVoicePlaybackStateChangedListener {
-        void onRecordingStopped();
-        void onPlaybackStopped();
     }
 
     /**

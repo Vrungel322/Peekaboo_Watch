@@ -8,6 +8,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.support.wearable.view.ActionChooserView;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.style.StyleSpan;
@@ -29,7 +30,7 @@ public class RsvpFragment extends Fragment implements
         GestureDetector.OnGestureListener,
         GestureDetector.OnDoubleTapListener
 {
-    private static final String VOICE_FILE_NAME = "voice.wav";
+    public static final String VOICE_FILE_NAME = "voice.wav";
 
     private static final int STATE_INIT    = 0;
     private static final int STATE_DONE    = 1;
@@ -307,7 +308,7 @@ public class RsvpFragment extends Fragment implements
         recording_size = size;
         Activity activity = getActivity();
         if (activity instanceof WearActivity)
-            ((WearActivity)activity).sendVoice(VOICE_FILE_NAME);
+            ((WearActivity) activity).sendVoice();
         updatePosView(false);
     }
 

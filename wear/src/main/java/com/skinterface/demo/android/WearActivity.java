@@ -5,7 +5,8 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.wearable.activity.WearableActivity;
-import android.support.wearable.view.DismissOverlayView;
+import android.support.wearable.view.DotsPageIndicator;
+import android.support.wearable.view.GridViewPager;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.KeyEvent;
@@ -28,7 +29,6 @@ import org.json.JSONObject;
 import java.io.ByteArrayOutputStream;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Set;
@@ -351,10 +351,50 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     @Override
     public void onClick(View v) {
         int id = v.getId();
-        if (id == R.id.text || id == R.id.clock || id == R.id.pager) {
+        if (id == R.id.text || id == R.id.clock) {
             startCardsActivity();
             return;
         }
+        if (id == R.id.voice_abort)
+            sendVoiceAbort();
+        if (id == R.id.voice_playback)
+            sendVoicePlayback();
+        if (id == R.id.voice_confirm)
+            sendVoiceConfirm();
+    }
+
+    public void sendVoiceAbort() {
+        View dlg = mContainerView.findViewById(R.id.voice_dialog);
+        if (dlg != null)
+            mContainerView.removeView(dlg);
+    }
+
+    public void sendVoicePlayback() {
+        getRsvpFragment().recorder.startPlay();
+    }
+
+    public void sendVoiceConfirm() {
+        View dlg = mContainerView.findViewById(R.id.voice_dialog);
+        if (dlg != null)
+            mContainerView.removeView(dlg);
+        String nodeId = pickBestNodeId();
+        if (nodeId == null)
+            return;
+        // TODO: should use DataApi + Asset
+        ByteArrayOutputStream bout = new ByteArrayOutputStream();
+        byte[] buffer = new byte[16*1024];
+        FileInputStream in = null;
+        try {
+            in = openFileInput(RsvpFragment.VOICE_FILE_NAME);
+            int read;
+            while ((read = in.read(buffer, 0, buffer.length)) > 0)
+                bout.write(buffer, 0, read);
+        } catch (IOException e) {
+            Log.e(TAG, "Failed to read the sound file into a byte array", e);
+        } finally {
+            IOUtils.safeClose(in);
+        }
+        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/voice", bout.toByteArray());
     }
 
     private String pickBestNodeId() {
@@ -371,28 +411,11 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
         return bestNodeId;
     }
 
-    // TODO: should use DataApi + Asset
-    public void sendVoice(String fname) {
-        String nodeId = pickBestNodeId();
-        if (nodeId == null)
-            return;
-        ByteArrayOutputStream bout = new ByteArrayOutputStream();
-        byte[] buffer = new byte[16*1024];
-        FileInputStream in = null;
-        try {
-            in = openFileInput(fname);
-            int read;
-            while ((read = in.read(buffer, 0, buffer.length)) > 0)
-                bout.write(buffer, 0, read);
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to read the sound file into a byte array", e);
-        } finally {
-            try {
-                if (in != null)
-                    in.close();
-            } catch (IOException e) { /* ignore */}
-        }
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/voice", bout.toByteArray());
+    public void sendVoice() {
+        View view = getLayoutInflater().inflate(R.layout.voice_confirm, mContainerView);
+        view.findViewById(R.id.voice_abort).setOnClickListener(this);
+        view.findViewById(R.id.voice_confirm).setOnClickListener(this);
+        view.findViewById(R.id.voice_playback).setOnClickListener(this);
     }
 
 }

@@ -1,0 +1,51 @@
+<?xml version="1.0" encoding="utf-8"?>
+<android.support.wearable.view.BoxInsetLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/voice_dialog"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/card_default_background"
+    >
+
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|top"
+        app:layout_box="all"
+        android:text="Send voice message"
+        />
+
+    <android.support.wearable.view.CircularButton
+        android:id="@+id/voice_abort"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginBottom="16dp"
+        android:layout_marginLeft="40dp"
+        android:layout_gravity="bottom|left"
+        app:layout_box="all"
+        app:imageScaleMode="center"
+        android:src="@drawable/ic_close_black_48dp"
+        />
+    <android.support.wearable.view.CircularButton
+        android:id="@+id/voice_playback"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_marginBottom="16dp"
+        android:layout_marginRight="40dp"
+        android:layout_gravity="bottom|right"
+        app:layout_box="all"
+        app:imageScaleMode="center"
+        android:src="@drawable/ic_mic_black_48dp"
+        />
+    <android.support.wearable.view.CircularButton
+        android:id="@+id/voice_confirm"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        android:layout_gravity="center"
+        app:imageScaleMode="center"
+        android:src="@drawable/ic_arrow_upward_black_48dp"
+        />
+
+
+</android.support.wearable.view.BoxInsetLayout>

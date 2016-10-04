@@ -25,6 +25,12 @@ import com.peekaboo.presentation.services.ChatRequest;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.Collections;
 import java.util.Map;
@@ -81,12 +87,12 @@ public class RsvpService extends Service implements
     RsvpRequest.Stub mBinder = new RsvpRequest.Stub() {
         @Override
         public String post(String action, Map params, String data) throws RemoteException {
-            if ("play".equals(action)) {
-                requestPlay(SSect.fromJson(data));
+            if ("sect".equals(action) || "menu".equals(action)) {
+                requestPlay(action, SSect.fromJson(data));
                 return "true";
             }
             else if ("stop".equals(action)) {
-                requestPlay(null);
+                requestPlay(action, null);
                 return "true";
             }
             else if ("chat-connect".equals(action)) {
@@ -202,18 +208,15 @@ public class RsvpService extends Service implements
         return bestNodeId;
     }
 
-    final void requestPlay(SSect sect) {
+    final void requestPlay(String action, SSect sect) {
         String nodeId = pickBestNodeId();
         if (nodeId == null)
             return;
         JSONObject json = new JSONObject();
         try {
-            if (sect == null) {
-                json.put("action", "stop");
-            } else {
-                json.put("action", "sect");
+            json.put("action", action);
+            if (sect != null)
                 sect.fillJson(json);
-            }
         } catch (JSONException e) {}
         Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, json.toString().getBytes(utf8));
     }
@@ -243,6 +246,37 @@ public class RsvpService extends Service implements
                     Log.e(TAG, "Error sending voice", e);
                 }
             }
+
+        }
+        if ("/action".equals(msg.getPath())) {
+                final String reqData = new String(msg.getData(), IOUtils.UTF8);
+                MainActivity.executor.execute(new Runnable() {
+                    @Override
+                    public void run() {
+                        InputStream is = null;
+                        try {
+                            URL url = new URL(MainActivity.JSON_URL);
+                            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                            conn.setReadTimeout(5000 /* milliseconds */);
+                            conn.setConnectTimeout(5000 /* milliseconds */);
+                            conn.setRequestMethod("POST");
+                            conn.setDoInput(true);
+                            OutputStream os = conn.getOutputStream();
+                            os.write(reqData.getBytes(utf8));
+                            os.close();
+                            conn.connect();
+                            JSONObject jobj = IOUtils.parseHTTPResponce(conn);
+                            if (jobj != null) {
+                                SSect sect = SSect.fromJson(jobj);
+                                requestPlay("sect", sect);
+                            }
+                        } catch (Throwable e) {
+                            Log.e(TAG, "Server connection error", e);
+                        } finally {
+                            IOUtils.safeClose(is);
+                        }
+                    }
+                });
 
         }
     }

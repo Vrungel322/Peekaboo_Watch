@@ -1,12 +1,12 @@
 package com.skinterface.demo.android;
 
+import android.app.Fragment;
 import android.content.Intent;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.wearable.activity.WearableActivity;
-import android.support.wearable.view.DotsPageIndicator;
-import android.support.wearable.view.GridViewPager;
+import android.support.wearable.view.WearableListView;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.KeyEvent;
@@ -42,6 +42,10 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     //private DismissOverlayView mDismissOverlay;
     private TextView mTitleView;
     private GestureDetector mDetector;
+
+    // Loaded site menu
+    SSect wholeMenuTree;
+    String sessionID;
 
     private Set<Node> mVoiceNodes;
     private GoogleApiClient mGoogleApiClient;
@@ -111,6 +115,14 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     public boolean onKeyDown(int keyCode, KeyEvent event) {
         Log.i(TAG, "onKeyDown: " + keyCode + " : " + event);
         return super.onKeyDown(keyCode, event);
+    }
+
+    @Override
+    public boolean onKeyUp(int keyCode, KeyEvent event) {
+        Log.i(TAG, "onKeyUp: " + keyCode + " : " + event);
+        if (keyCode == KeyEvent.KEYCODE_STEM_2)
+            showMenu(wholeMenuTree);
+        return super.onKeyUp(keyCode, event);
     }
 
     public RsvpFragment getRsvpFragment() {
@@ -233,6 +245,10 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
                         playCurrentSect();
                     }
                 }
+                else if ("menu".equals(action)) {
+                    wholeMenuTree = SSect.fromJson(jobj);
+                    sessionID = wholeMenuTree.entity.val("session");
+                }
                 else if ("stop".equals(action)) {
                     stopCurrentSect();
                 }
@@ -351,10 +367,10 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     @Override
     public void onClick(View v) {
         int id = v.getId();
-        if (id == R.id.text || id == R.id.clock) {
+        if (id == R.id.title)
+            showMenu(wholeMenuTree);
+        if (id == R.id.text || id == R.id.clock)
             startCardsActivity();
-            return;
-        }
         if (id == R.id.voice_abort)
             sendVoiceAbort();
         if (id == R.id.voice_playback)
@@ -417,5 +433,37 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
         view.findViewById(R.id.voice_confirm).setOnClickListener(this);
         view.findViewById(R.id.voice_playback).setOnClickListener(this);
     }
+
+    protected void exitMenu(final SSect menu) {
+        Fragment fr = getFragmentManager().findFragmentByTag("menu");
+        if (fr != null)
+            getFragmentManager().beginTransaction().remove(fr).commit();
+        if (menu != null && "show".equals(menu.entity.data)) {
+            String nodeId = pickBestNodeId();
+            if (nodeId == null)
+                return;
+            Action action = Action.create(menu.entity.data);
+            if (menu.entity.props != null) {
+                for (String key : menu.entity.props.keySet())
+                    action.add(key, menu.entity.props.get(key));
+            }
+            String reqData = action.serializeToCmd(sessionID, 0).toString();
+            Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/action", reqData.getBytes(IOUtils.UTF8));
+        }
+    }
+
+    protected void showMenu(final SSect action) {
+        stopCurrentSect();
+        if (action == null)
+            return;
+        if (action.children != null && action.children.length > 0) {
+            WearMenuFragment fr = WearMenuFragment.create(wholeMenuTree);
+            getFragmentManager().beginTransaction().add(R.id.container, fr, "menu").commit();
+        }
+        else if (action.entity.data != null) {
+            exitMenu(action);
+        }
+    }
+
 
 }

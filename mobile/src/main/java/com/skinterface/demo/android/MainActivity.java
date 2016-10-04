@@ -78,7 +78,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     static final String JSON_URL = "http://u-com.pro/UpStars/Service";
     //static final String JSON_URL = "http://192.168.2.157:8080/UpStars/Service";
 
-    final ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
+    final static ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     final Handler handler = new Handler(Looper.getMainLooper());
 
     private RsvpRequest mRsvpService;
@@ -100,10 +100,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     String sessionID;
     Map<String,String> storage = new HashMap<>();
 
-    // Main site menu
-    //MenuBar menu_main;
-
-    // Loaded size menu
+    // Loaded site menu
     SSect wholeMenuTree;
     // Current data
     SSect currentData;
@@ -208,7 +205,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         "reasons for relations with any person - a partner, a new sympathy, " +
                         "an old friend, your child, and check the compatibility of the child " +
                         "and the nanny, colleagues in the work group and so long, and so forth.";
-                postRsvpService(sect);
+                postRsvpService("sect", sect);
             }
             return true;
         }
@@ -557,6 +554,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         SSect ds = SSect.fromJson(result);
                         wholeMenuTree = ds;
                         setButtonEnabled(R.id.sf_menu, true);
+                        wholeMenuTree.padd("session", sessionID);
+                        postRsvpService("menu", wholeMenuTree);
                     }
                 });
             }
@@ -625,12 +624,12 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    void postRsvpService(SSect sect) {
+    void postRsvpService(String action, SSect sect) {
         if (mRsvpService == null)
             return;
         try {
             if (sect != null)
-                mRsvpService.post("play", null, sect.fillJson(new JSONObject()).toString());
+                mRsvpService.post(action, null, sect.fillJson(new JSONObject()).toString());
         } catch (RemoteException e) {
             Log.e(TAG, "Error sending a message to RsvpService", e);
         }
@@ -760,7 +759,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         words.addValueWords(ds);
         playValueVoice(ds);
         play(words);
-        postRsvpService(ds);
+        postRsvpService("sect", ds);
         if (rvChildren.getVisibility() == View.VISIBLE)
             justRead |= RsvpWords.JR_LIST;
         fillCommands();

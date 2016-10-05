@@ -9,42 +9,34 @@
     >
 
     <TextView
+        android:id="@+id/position"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal|top"
+        android:layout_marginTop="32dp"
         app:layout_box="all"
-        android:text="Send voice message"
-        />
+        android:typeface="monospace"
+        android:text="15:25" />
 
     <android.support.wearable.view.CircularButton
-        android:id="@+id/voice_abort"
+        android:id="@android:id/button1"
         android:layout_width="48dp"
         android:layout_height="48dp"
-        android:layout_marginBottom="16dp"
-        android:layout_marginLeft="40dp"
-        android:layout_gravity="bottom|left"
-        app:layout_box="all"
+        android:layout_marginBottom="8dp"
+        android:layout_gravity="bottom|center_horizontal"
+        app:layout_box="bottom"
         app:imageScaleMode="center"
-        android:src="@drawable/ic_close_black_48dp"
+        android:src="@drawable/ic_play_arrow_black_48dp"
         />
     <android.support.wearable.view.CircularButton
-        android:id="@+id/voice_playback"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginBottom="16dp"
-        android:layout_marginRight="40dp"
-        android:layout_gravity="bottom|right"
-        app:layout_box="all"
-        app:imageScaleMode="center"
-        android:src="@drawable/ic_mic_black_48dp"
-        />
-    <android.support.wearable.view.CircularButton
-        android:id="@+id/voice_confirm"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
+        android:id="@android:id/button2"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
         android:layout_gravity="center"
+        app:layout_box="all"
         app:imageScaleMode="center"
-        android:src="@drawable/ic_arrow_upward_black_48dp"
+        android:src="@drawable/ic_send_black_48dp"
+        android:visibility="invisible"
         />
 
 

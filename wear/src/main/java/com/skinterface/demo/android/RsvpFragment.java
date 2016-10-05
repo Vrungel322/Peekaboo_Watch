@@ -1,13 +1,8 @@
 package com.skinterface.demo.android;
 
-import android.Manifest;
-import android.app.Activity;
 import android.app.Fragment;
 import android.graphics.Typeface;
-import android.os.Build;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Message;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.style.StyleSpan;
@@ -19,64 +14,17 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import java.io.File;
-
-import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static com.skinterface.demo.android.WearActivity.TAG;
 
 public class RsvpFragment extends Fragment implements
         View.OnClickListener,
-        GestureDetector.OnGestureListener,
-        GestureDetector.OnDoubleTapListener
+        GestureDetector.OnGestureListener
 {
-    public static final String VOICE_FILE_NAME = "voice.wav";
-
     private static final int STATE_INIT    = 0;
     private static final int STATE_DONE    = 1;
     private static final int STATE_TITLE   = 2;
     private static final int STATE_ARTICLE = 3;
     private static final int STATE_CHILD   = 4;
-
-    static final int MSG_RSVP_PLAY_STARTED  = 1;
-    static final int MSG_RSVP_PLAY_FINISHED = 2;
-
-    static final int MSG_SOUND_PLAY_FAIL    = 10;
-    static final int MSG_SOUND_PLAY_STARTED = 11;
-    static final int MSG_SOUND_PLAY_FINISHED= 12;
-    static final int MSG_SOUND_REC_FAIL     = 13;
-    static final int MSG_SOUND_REC_STARTED  = 14;
-    static final int MSG_SOUND_REC_PROGRESS = 15;
-    static final int MSG_SOUND_REC_FINISHED = 16;
-
-    final Handler handler = new Handler() {
-        @Override
-        public void handleMessage(Message msg) {
-            switch (msg.what) {
-            case MSG_RSVP_PLAY_STARTED:
-                onRsvpPlayStart();
-                break;
-            case MSG_RSVP_PLAY_FINISHED:
-                onRsvpPlayStop();
-                break;
-            case MSG_SOUND_PLAY_STARTED:
-                break;
-            case MSG_SOUND_PLAY_FINISHED:
-                break;
-            case MSG_SOUND_REC_FAIL:
-                onSoundRecFail();
-                break;
-            case MSG_SOUND_REC_STARTED:
-                onSoundRecStart();
-                break;
-            case MSG_SOUND_REC_PROGRESS:
-                onSoundRecProgress(msg.arg1, msg.arg2);
-                break;
-            case MSG_SOUND_REC_FINISHED:
-                onSoundRecStop(msg.arg1, msg.arg2);
-                break;
-            }
-        }
-    };
 
     RsvpView mRsvpView;
     TextView mPositionView;
@@ -84,10 +32,6 @@ public class RsvpFragment extends Fragment implements
     SSect sect;
     RsvpWords words;
     int state;
-    SoundRecorder recorder;
-    boolean recording;
-    int recording_time;
-    int recording_size;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle saved) {
@@ -95,7 +39,7 @@ public class RsvpFragment extends Fragment implements
         view.findViewById(R.id.next).setOnClickListener(this);
         view.findViewById(R.id.prev).setOnClickListener(this);
         mRsvpView = (RsvpView) view.findViewById(R.id.rsvp);
-        mRsvpView.setListener(handler);
+        mRsvpView.setListener(((WearActivity)getActivity()).handler);
         mPositionView = (TextView) view.findViewById(R.id.position);
         return view;
     }
@@ -129,11 +73,6 @@ public class RsvpFragment extends Fragment implements
     private void updatePosView(boolean playing) {
         if (mRsvpView == null)
             return;
-        if (recording) {
-            String txt = String.format("%1$tM:%1$tS %2$1.2fmb ", (long)recording_time, recording_size / (float)(1024*1024));
-            mPositionView.setText(txt);
-            return;
-        }
         if (sect == null) {
             mPositionView.setText("");
             return;
@@ -281,36 +220,6 @@ public class RsvpFragment extends Fragment implements
         updatePosView(false);
     }
 
-    public void onSoundRecFail() {
-        recording = false;
-        recording_time = 0;
-        if (getActivity() != null)
-            new File(getActivity().getFilesDir(), VOICE_FILE_NAME).delete();
-    }
-
-    public void onSoundRecStart() {
-        recording = true;
-        recording_time = 0;
-        updatePosView(false);
-    }
-
-    private void onSoundRecProgress(int millis, int size) {
-        recording_time = millis;
-        recording_size = size;
-        Log.i(TAG, "recording "+millis+" ms / "+size+" bytes");
-        updatePosView(false);
-    }
-
-    public void onSoundRecStop(int millis, int size) {
-        recording = false;
-        recording_time = millis;
-        recording_size = size;
-        Activity activity = getActivity();
-        if (activity instanceof WearActivity)
-            ((WearActivity) activity).sendVoice();
-        updatePosView(false);
-    }
-
     @Override
     public void onClick(View v) {
         if (v.getId() == R.id.next) {
@@ -318,27 +227,6 @@ public class RsvpFragment extends Fragment implements
         }
         else if (v.getId() == R.id.prev) {
             onPrev();
-        }
-    }
-
-    private void startRecordVoice() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            int res = getActivity().checkSelfPermission(Manifest.permission.RECORD_AUDIO);
-            if (res != PERMISSION_GRANTED) {
-                getActivity().requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 1);
-                return;
-            }
-        }
-        try {
-            if (recorder != null) {
-                if (recorder.getState() != SoundRecorder.State.IDLE)
-                    return;
-            } else {
-                recorder = new SoundRecorder(getActivity(), VOICE_FILE_NAME, this.handler);
-            }
-            recorder.startRecording();
-        } catch (Exception e) {
-            Log.e(TAG, "Error on voice recording", e);
         }
     }
 
@@ -350,13 +238,6 @@ public class RsvpFragment extends Fragment implements
 
     public void onUpOrCancel(boolean cancel) {
         Log.d(TAG,"onUpOrCancel: cancel="+cancel);
-        if (recording) {
-            try {
-                recorder.stopRecording();
-            } catch (Exception e) {
-                Log.e(TAG, "Error on voice recording", e);
-            }
-        }
     }
 
     @Override
@@ -375,7 +256,7 @@ public class RsvpFragment extends Fragment implements
         int dx2 = (Cx -x)*(Cx - x);
         int dy2 = (Cy -y)*(Cy - y);
         if (dx2 < 50*50 && dy2 < 50*50)
-            startRecordVoice();
+            ((WearActivity)getActivity()).startRecordVoice();
     }
 
     @Override
@@ -392,24 +273,6 @@ public class RsvpFragment extends Fragment implements
     @Override
     public boolean onSingleTapUp(MotionEvent event) {
         Log.d(TAG, "onSingleTapUp: " + event.toString());
-        return true;
-    }
-
-    @Override
-    public boolean onDoubleTap(MotionEvent event) {
-        Log.d(TAG, "onDoubleTap: " + event.toString());
-        return true;
-    }
-
-    @Override
-    public boolean onDoubleTapEvent(MotionEvent event) {
-        Log.d(TAG, "onDoubleTapEvent: " + event.toString());
-        return true;
-    }
-
-    @Override
-    public boolean onSingleTapConfirmed(MotionEvent event) {
-        Log.d(TAG, "onSingleTapConfirmed: " + event.toString());
         return true;
     }
 }

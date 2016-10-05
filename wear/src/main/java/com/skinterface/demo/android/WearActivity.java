@@ -1,12 +1,14 @@
 package com.skinterface.demo.android;
 
+import android.Manifest;
 import android.app.Fragment;
 import android.content.Intent;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Message;
 import android.support.annotation.NonNull;
 import android.support.wearable.activity.WearableActivity;
-import android.support.wearable.view.WearableListView;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.KeyEvent;
@@ -20,6 +22,7 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.CapabilityApi;
 import com.google.android.gms.wearable.CapabilityInfo;
+import com.google.android.gms.wearable.MessageApi;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
 
@@ -27,21 +30,71 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.ByteArrayOutputStream;
+import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.Set;
 
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+
 public class WearActivity extends WearableActivity implements View.OnClickListener {
     public static final String TAG = "SkinterWatch";
 
-    Handler handler = new Handler();
+    public static final String VOICE_FILE_NAME = "voice.wav";
+
+    static final int MSG_RSVP_PLAY_STARTED  = 1;
+    static final int MSG_RSVP_PLAY_FINISHED = 2;
+
+    static final int MSG_SOUND_PLAY_FAIL    = 10;
+    static final int MSG_SOUND_PLAY_STARTED = 11;
+    static final int MSG_SOUND_PLAY_PROGRESS= 12;
+    static final int MSG_SOUND_PLAY_FINISHED= 13;
+    static final int MSG_SOUND_REC_FAIL     = 14;
+    static final int MSG_SOUND_REC_STARTED  = 15;
+    static final int MSG_SOUND_REC_PROGRESS = 16;
+    static final int MSG_SOUND_REC_FINISHED = 17;
+
+    final Handler handler = new Handler() {
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+            case MSG_RSVP_PLAY_STARTED:
+                getRsvpFragment().onRsvpPlayStart();
+                break;
+            case MSG_RSVP_PLAY_FINISHED:
+                getRsvpFragment().onRsvpPlayStop();
+                break;
+            case MSG_SOUND_PLAY_STARTED:
+                onSoundPlayStart();
+                break;
+            case MSG_SOUND_PLAY_PROGRESS:
+                onSoundPlayProgress(msg.arg1, msg.arg2);
+                break;
+            case MSG_SOUND_PLAY_FINISHED:
+                onSoundPlayStop();
+                break;
+            case MSG_SOUND_REC_FAIL:
+                onSoundRecFail();
+                break;
+            case MSG_SOUND_REC_STARTED:
+                onSoundRecStart();
+                break;
+            case MSG_SOUND_REC_PROGRESS:
+                onSoundRecProgress(msg.arg1, msg.arg2);
+                break;
+            case MSG_SOUND_REC_FINISHED:
+                onSoundRecStop(msg.arg1, msg.arg2);
+                break;
+            }
+        }
+    };
 
     private ViewGroup mContainerView;
-    //private DismissOverlayView mDismissOverlay;
     private TextView mTitleView;
     private GestureDetector mDetector;
+    private SoundRecorder recorder;
 
     // Loaded site menu
     SSect wholeMenuTree;
@@ -57,10 +110,6 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
 //        setAmbientEnabled();
 
         mContainerView = (ViewGroup) findViewById(R.id.container);
-
-        //mDismissOverlay = (DismissOverlayView) findViewById(R.id.dismiss_overlay);
-        //mDismissOverlay.setIntroText(R.string.long_press_intro);
-        //mDismissOverlay.showIntroIfNecessary();
 
         mTitleView = (TextView) findViewById(R.id.title);
         mTitleView.setOnClickListener(this);
@@ -101,7 +150,6 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
         }, "rsvp_voice");
 
         mDetector = new GestureDetector(this, getRsvpFragment(), handler);
-        mDetector.setOnDoubleTapListener(getRsvpFragment());
 
         onNewIntent(getIntent());
     }
@@ -127,6 +175,12 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
 
     public RsvpFragment getRsvpFragment() {
         return (RsvpFragment)getFragmentManager().findFragmentById(R.id.fr_rsvp);
+    }
+    public WearMenuFragment getMenuFragment() {
+        return (WearMenuFragment)getFragmentManager().findFragmentByTag("menu");
+    }
+    public VoiceFragment getVoiceFragment() {
+        return (VoiceFragment)getFragmentManager().findFragmentByTag("voice_confirm");
     }
 
     @Override
@@ -371,46 +425,131 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
             showMenu(wholeMenuTree);
         if (id == R.id.text || id == R.id.clock)
             startCardsActivity();
-        if (id == R.id.voice_abort)
-            sendVoiceAbort();
-        if (id == R.id.voice_playback)
-            sendVoicePlayback();
-        if (id == R.id.voice_confirm)
-            sendVoiceConfirm();
+    }
+
+    public SoundRecorder getRecorder() {
+        return recorder;
     }
 
     public void sendVoiceAbort() {
-        View dlg = mContainerView.findViewById(R.id.voice_dialog);
-        if (dlg != null)
-            mContainerView.removeView(dlg);
+        VoiceFragment fr = getVoiceFragment();
+        if (fr != null)
+            getFragmentManager().beginTransaction().remove(fr).commit();
     }
 
-    public void sendVoicePlayback() {
-        getRsvpFragment().recorder.startPlay();
-    }
-
-    public void sendVoiceConfirm() {
-        View dlg = mContainerView.findViewById(R.id.voice_dialog);
-        if (dlg != null)
-            mContainerView.removeView(dlg);
+    public void sendVoiceConfirm(VoiceFragment fr) {
         String nodeId = pickBestNodeId();
-        if (nodeId == null)
+        if (nodeId == null) {
+            if (fr != null)
+                fr.onDataSendFail();
             return;
+        }
         // TODO: should use DataApi + Asset
         ByteArrayOutputStream bout = new ByteArrayOutputStream();
         byte[] buffer = new byte[16*1024];
         FileInputStream in = null;
         try {
-            in = openFileInput(RsvpFragment.VOICE_FILE_NAME);
+            in = openFileInput(VOICE_FILE_NAME);
             int read;
             while ((read = in.read(buffer, 0, buffer.length)) > 0)
                 bout.write(buffer, 0, read);
         } catch (IOException e) {
             Log.e(TAG, "Failed to read the sound file into a byte array", e);
+            if (fr != null)
+                fr.onDataSendFail();
+            return;
         } finally {
             IOUtils.safeClose(in);
         }
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/voice", bout.toByteArray());
+        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/voice", bout.toByteArray())
+                .setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+            @Override
+            public void onResult(@NonNull MessageApi.SendMessageResult result) {
+                VoiceFragment fr = getVoiceFragment();
+                if (fr != null) {
+                    if (result.getStatus().isSuccess())
+                        getFragmentManager().beginTransaction().remove(fr).commit();
+                    else
+                        fr.onDataSendFail();
+                }
+            }
+        });
+    }
+
+    public void onSoundRecFail() {
+        new File(getFilesDir(), VOICE_FILE_NAME).delete();
+        VoiceFragment fr = getVoiceFragment();
+        if (fr != null)
+            fr.onSoundRecFail();
+    }
+
+    public void onSoundRecStart() {
+        VoiceFragment fr = getVoiceFragment();
+        if (fr != null)
+            fr.onSoundRecStart();
+    }
+
+    public void onSoundRecProgress(int millis, int size) {
+        Log.i(TAG, "recording "+millis+" ms / "+size+" bytes");
+        VoiceFragment fr = getVoiceFragment();
+        if (fr != null)
+            fr.onSoundRecProgress(millis, size);
+    }
+
+    public void onSoundRecStop(int millis, int size) {
+        VoiceFragment fr = getVoiceFragment();
+        if (fr != null)
+            fr.onSoundRecStop(millis, size);
+    }
+
+    public void onSoundPlayStart() {
+        VoiceFragment fr = getVoiceFragment();
+        if (fr != null)
+            fr.onSoundPlayStart();
+    }
+
+    public void onSoundPlayProgress(int millis, int total) {
+        Log.i(TAG, "playing "+millis+" ms / "+total+" ms");
+        VoiceFragment fr = getVoiceFragment();
+        if (fr != null)
+            fr.onSoundPlayProgress(millis, total);
+    }
+
+    public void onSoundPlayStop() {
+        VoiceFragment fr = getVoiceFragment();
+        if (fr != null)
+            fr.onSoundPlayStop();
+    }
+
+    public void startRecordVoice() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            int res = checkSelfPermission(Manifest.permission.RECORD_AUDIO);
+            if (res != PERMISSION_GRANTED) {
+                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 1);
+                return;
+            }
+        }
+        try {
+            if (recorder != null) {
+                if (recorder.getState() != SoundRecorder.State.IDLE)
+                    return;
+            } else {
+                recorder = new SoundRecorder(this, VOICE_FILE_NAME, this.handler);
+            }
+            recorder.startRecording();
+        } catch (Exception e) {
+            Log.e(TAG, "Error on voice recording", e);
+        }
+        VoiceFragment fr = VoiceFragment.create();
+        getFragmentManager().beginTransaction().add(R.id.container, fr, "voice_confirm").commit();
+    }
+
+    public void stopRecordVoice() {
+        try {
+            recorder.stopRecording();
+        } catch (Exception e) {
+            Log.e(TAG, "Error on voice recording", e);
+        }
     }
 
     private String pickBestNodeId() {
@@ -425,13 +564,6 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
             bestNodeId = node.getId();
         }
         return bestNodeId;
-    }
-
-    public void sendVoice() {
-        View view = getLayoutInflater().inflate(R.layout.voice_confirm, mContainerView);
-        view.findViewById(R.id.voice_abort).setOnClickListener(this);
-        view.findViewById(R.id.voice_confirm).setOnClickListener(this);
-        view.findViewById(R.id.voice_playback).setOnClickListener(this);
     }
 
     protected void exitMenu(final SSect menu) {

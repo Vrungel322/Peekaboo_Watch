@@ -8,6 +8,7 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URLConnection;
 import java.nio.charset.Charset;
@@ -66,6 +67,14 @@ public class IOUtils {
         if (inp != null) {
             try {
                 inp.close();
+            } catch (IOException e) {
+            }
+        }
+    }
+    public static void safeClose(OutputStream out) {
+        if (out != null) {
+            try {
+                out.close();
             } catch (IOException e) {
             }
         }

@@ -165,7 +165,7 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
 
             s.wordsPosition += 1;
             if (s.wordsPosition == 0 && listener != null)
-                listener.sendEmptyMessage(RsvpFragment.MSG_RSVP_PLAY_STARTED);
+                listener.sendEmptyMessage(WearActivity.MSG_RSVP_PLAY_STARTED);
 
             if (s.wordsPosition >= s.length) {
                 //Log.d("rsvp", "play finished with length:"+length);
@@ -281,7 +281,7 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
                     if (new_state == STATE_IDLE) {
                         RsvpView view = view_ref.get();
                         if (view != null && view.listener != null && old_state == STATE_RSVP)
-                            view.listener.sendEmptyMessage(RsvpFragment.MSG_RSVP_PLAY_FINISHED);
+                            view.listener.sendEmptyMessage(WearActivity.MSG_RSVP_PLAY_FINISHED);
                     }
                     return true;
                 }
@@ -297,7 +297,7 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
                 if (new_state == STATE_IDLE) {
                     RsvpView view = view_ref.get();
                     if (view != null && view.listener != null)
-                        view.listener.sendEmptyMessage(RsvpFragment.MSG_RSVP_PLAY_FINISHED);
+                        view.listener.sendEmptyMessage(WearActivity.MSG_RSVP_PLAY_FINISHED);
                 }
                 return true;
             }

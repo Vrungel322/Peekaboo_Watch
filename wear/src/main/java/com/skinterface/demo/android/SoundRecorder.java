@@ -25,7 +25,6 @@ import android.media.MediaRecorder;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Handler;
-import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
 
@@ -51,10 +50,12 @@ public class SoundRecorder {
     private final AudioManager mAudioManager;
     private final Context mContext;
     private State mState = State.IDLE;
+    private int mFileSize;
+    private int mDuration;
 
     private Handler mHandler;
-    private AsyncTask<Void, Void, Void> mRecordingAsyncTask;
-    private AsyncTask<Void, Void, Void> mPlayingAsyncTask;
+    private AsyncTask<Void, Void, Boolean> mRecordingAsyncTask;
+    private AsyncTask<Void, Void, Boolean> mPlayingAsyncTask;
 
     public enum State {
         IDLE, RECORDING, PLAYING
@@ -80,7 +81,7 @@ public class SoundRecorder {
             return;
         }
 
-        mRecordingAsyncTask = new AsyncTask<Void, Void, Void>() {
+        mRecordingAsyncTask = new AsyncTask<Void, Void, Boolean>() {
 
             private AudioRecord mAudioRecord;
 
@@ -90,11 +91,11 @@ public class SoundRecorder {
             }
 
             @Override
-            protected Void doInBackground(Void... params) {
+            protected Boolean doInBackground(Void... params) {
                 int BUFFER_SIZE = AudioRecord.getMinBufferSize(RECORDING_RATE, CHANNEL_IN, FORMAT);
                 try {
                     if (BUFFER_SIZE < 0)
-                        return null;
+                        return Boolean.FALSE;
                     mAudioRecord = new AudioRecord(MediaRecorder.AudioSource.MIC,
                             RECORDING_RATE, CHANNEL_IN, FORMAT, BUFFER_SIZE * 3);
                     if (mAudioRecord.getState() == AudioRecord.STATE_INITIALIZED) {
@@ -108,47 +109,45 @@ public class SoundRecorder {
                     Log.e(TAG, "FAIL with rate "+RECORDING_RATE);
                 }
                 if (mAudioRecord == null)
-                    return null;
+                    return Boolean.FALSE;
                 BufferedOutputStream bufferedOutputStream = null;
                 try {
+                    mFileSize = 0;
+                    mDuration = 0;
                     long started = SystemClock.uptimeMillis();
-                    int written = 0;
                     bufferedOutputStream = new BufferedOutputStream(
                             mContext.openFileOutput(mOutputFileName, Context.MODE_PRIVATE));
                     byte[] buffer = new byte[BUFFER_SIZE];
                     mAudioRecord.startRecording();
-                    mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_REC_STARTED);
+                    mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_REC_STARTED);
                     while (!isCancelled()) {
                         int read = mAudioRecord.read(buffer, 0, buffer.length);
                         bufferedOutputStream.write(buffer, 0, read);
-                        written += read;
-                        int millis = (int)(SystemClock.uptimeMillis() - started);
-                        mHandler.obtainMessage(RsvpFragment.MSG_SOUND_REC_PROGRESS,
-                                millis, written).sendToTarget();
+                        mFileSize += read;
+                        mDuration = (int)(SystemClock.uptimeMillis() - started);
+                        mHandler.obtainMessage(WearActivity.MSG_SOUND_REC_PROGRESS,
+                                mDuration, mFileSize).sendToTarget();
                     }
-                    int finished = (int)(SystemClock.uptimeMillis() - started);
+                    mDuration = (int)(SystemClock.uptimeMillis() - started);
                     bufferedOutputStream.close();
-                    mHandler.obtainMessage(RsvpFragment.MSG_SOUND_REC_FINISHED,
-                            finished, written, mOutputFileName).sendToTarget();
-                } catch (IOException | NullPointerException | IndexOutOfBoundsException e) {
+                    mState = State.IDLE;
+                    mHandler.obtainMessage(WearActivity.MSG_SOUND_REC_FINISHED,
+                            mDuration, mFileSize, mOutputFileName).sendToTarget();
+                    return Boolean.TRUE;
+                } catch (Exception e) {
                     Log.e(TAG, "Failed to record data: " + e);
-                    mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_REC_FAIL);
+                    mState = State.IDLE;
+                    mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_REC_FAIL);
+                    return Boolean.FALSE;
                 } finally {
-                    if (bufferedOutputStream != null) {
-                        try {
-                            bufferedOutputStream.close();
-                        } catch (IOException e) {
-                            // ignore
-                        }
-                    }
+                    IOUtils.safeClose(bufferedOutputStream);
                     mAudioRecord.release();
                     mAudioRecord = null;
                 }
-                return null;
             }
 
             @Override
-            protected void onPostExecute(Void aVoid) {
+            protected void onPostExecute(Boolean res) {
                 mState = State.IDLE;
                 mRecordingAsyncTask = null;
             }
@@ -191,12 +190,12 @@ public class SoundRecorder {
 
         if (!new File(mContext.getFilesDir(), mOutputFileName).exists()) {
             // there is no recording to play
-            mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_PLAY_FAIL);
+            mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_PLAY_FAIL);
             return;
         }
         final int intSize = AudioTrack.getMinBufferSize(RECORDING_RATE, CHANNELS_OUT, FORMAT);
 
-        mPlayingAsyncTask = new AsyncTask<Void, Void, Void>() {
+        mPlayingAsyncTask = new AsyncTask<Void, Void, Boolean>() {
 
             private AudioTrack mAudioTrack;
 
@@ -208,7 +207,7 @@ public class SoundRecorder {
             }
 
             @Override
-            protected Void doInBackground(Void... params) {
+            protected Boolean doInBackground(Void... params) {
                 FileInputStream in = null;
                 try {
                     mAudioTrack = new AudioTrack(AudioManager.STREAM_MUSIC, RECORDING_RATE,
@@ -217,27 +216,34 @@ public class SoundRecorder {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP)
                         mAudioTrack.setVolume(AudioTrack.getMaxVolume() / 2);
                     mAudioTrack.play();
-                    mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_PLAY_STARTED);
+                    long started = SystemClock.uptimeMillis();
+                    mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_PLAY_STARTED);
                     in = mContext.openFileInput(mOutputFileName);
                     BufferedInputStream bis = new BufferedInputStream(in);
                     int read;
                     while (!isCancelled() && (read = bis.read(buffer, 0, buffer.length)) > 0) {
                         mAudioTrack.write(buffer, 0, read);
+                        int millis = (int)(SystemClock.uptimeMillis() - started);
+                        mHandler.obtainMessage(WearActivity.MSG_SOUND_PLAY_PROGRESS,
+                                millis, mDuration).sendToTarget();
                     }
-                    mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_PLAY_FINISHED);
+                    mState = State.IDLE;
+                    mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_PLAY_FINISHED);
+                    return Boolean.TRUE;
                 } catch (Exception e) {
                     Log.e(TAG, "Failed to playback", e);
-                    mHandler.sendEmptyMessage(RsvpFragment.MSG_SOUND_PLAY_FAIL);
+                    mState = State.IDLE;
+                    mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_PLAY_FAIL);
                 } finally {
                     IOUtils.safeClose(in);
                     if (mAudioTrack != null)
                         mAudioTrack.release();
                 }
-                return null;
+                return Boolean.FALSE;
             }
 
             @Override
-            protected void onPostExecute(Void aVoid) {
+            protected void onPostExecute(Boolean res) {
                 cleanup();
             }
 

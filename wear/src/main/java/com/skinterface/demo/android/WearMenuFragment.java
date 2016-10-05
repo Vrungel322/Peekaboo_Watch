@@ -2,9 +2,7 @@ package com.skinterface.demo.android;
 
 import android.app.Fragment;
 import android.content.Context;
-import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.support.annotation.Nullable;
 import android.support.wearable.view.WearableListView;
@@ -63,7 +61,27 @@ public class WearMenuFragment extends Fragment implements WearableListView.Click
             @Override
             public void onCentralPositionChanged(int i) {}
         });
-        return view;
+        SwipeDismissLayout dismissLayout = new SwipeDismissLayout(getActivity());
+        ViewGroup.LayoutParams lp = view.getLayoutParams();
+        dismissLayout.setLayoutParams(lp);
+        dismissLayout.addView(view, new ViewGroup.MarginLayoutParams(lp.MATCH_PARENT, lp.MATCH_PARENT));
+        dismissLayout.setOnDismissedListener(new SwipeDismissLayout.OnDismissedListener() {
+            @Override
+            public void onDismissed(SwipeDismissLayout layout) {
+                ((WearActivity) getActivity()).exitMenu(null);
+            }
+        });
+        dismissLayout.setOnSwipeProgressChangedListener(new SwipeDismissLayout.OnSwipeProgressChangedListener() {
+            @Override
+            public void onSwipeProgressChanged(SwipeDismissLayout layout, float progress, float translate) {
+                getView().setScrollX(-(int)translate);
+            }
+            @Override
+            public void onSwipeCancelled(SwipeDismissLayout layout) {
+                getView().setScrollX(0);
+            }
+        });
+        return dismissLayout;
     }
 
     // WearableListView click listener

@@ -3,12 +3,6 @@
       xmlns:android="http://schemas.android.com/apk/res/android">
 
     <group android:checkableBehavior="single" android:id="@+id/grp1">
-        <item android:title="Hello Watch Rsvp"
-            android:checkable="false"
-            android:id="@+id/rsvp_hello"/>
-        <item android:title="Stop Watch Rsvp"
-            android:checkable="false"
-            android:id="@+id/rsvp_stop"/>
         <item android:title="Notify Watch"
             android:checkable="false"
             android:id="@+id/rsvp_notify"/>

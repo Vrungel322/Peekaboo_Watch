@@ -147,6 +147,16 @@ class SSect {
         return this;
     }
 
+    static SSect makeMenu(String title) {
+        SSect ds = new SSect();
+        ds.entity.media = "none";
+        ds.title = new SEntity();
+        ds.title.media = "text";
+        ds.title.role = "title";
+        ds.title.data = title;
+        return ds;
+    }
+
     public String toString() {
         if (title != null)
             return title.data;

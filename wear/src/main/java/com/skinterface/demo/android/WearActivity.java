@@ -33,8 +33,6 @@ import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
-import java.util.Arrays;
-import java.util.Comparator;
 import java.util.Set;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
@@ -95,10 +93,7 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     private TextView mTitleView;
     private GestureDetector mDetector;
     private SoundRecorder recorder;
-
-    // Loaded site menu
-    SSect wholeMenuTree;
-    String sessionID;
+    private SectionsModel model;
 
     private Set<Node> mVoiceNodes;
     private GoogleApiClient mGoogleApiClient;
@@ -169,7 +164,7 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         Log.i(TAG, "onKeyUp: " + keyCode + " : " + event);
         if (keyCode == KeyEvent.KEYCODE_STEM_2)
-            showMenu(wholeMenuTree);
+            showMenu(model.getMenu());
         return super.onKeyUp(keyCode, event);
     }
 
@@ -196,9 +191,9 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     }
 
     public void playCurrentSect() {
-        if (SectionsModel.instance.size() <= 0)
+        SSect sect = model.currArticle();
+        if (sect == null)
             return;
-        SSect sect = SectionsModel.instance.last();
         RsvpFragment fr = getRsvpFragment();
         if (fr != null)
             fr.play(sect);
@@ -213,74 +208,8 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
         String partner = own ? jmsg.optString("receiver") : jmsg.optString("sender");;
         if (partner == null || partner.isEmpty())
             return;
-        for (SSect sect : SectionsModel.instance.getSections()) {
-            if ("chat".equals(sect.entity.media) && partner.equals(sect.entity.name)) {
-                mergeChatMessage(jmsg, sect);
-                return;
-            }
-        }
-        SSect chat = new SSect();
-        chat.entity.media = "chat";
-        chat.entity.name = partner;
-        chat.title = new SEntity();
-        chat.title.media = "text";
-        chat.title.data = partner;
-        chat.hasChildren = true;
-        chat.children = new SSect[0];
-        SectionsModel.instance.addSection(chat);
-        mergeChatMessage(jmsg, chat);
-    }
-
-    public void mergeChatMessage(JSONObject jmsg, SSect chat) {
-        long id = jmsg.optLong("id");
-        boolean own = jmsg.optBoolean("own");
-        long timestamp = jmsg.optLong("timestamp");
-        String receiver = jmsg.optString("receiver");
-        String sender = jmsg.optString("sender");
-        String status = jmsg.optString("status");
-        String text = jmsg.optString("text");
-        // find this message in the chat
-        SSect msg = null;
-        if (chat.children != null) {
-            for (SSect old : chat.children) {
-                if (old.chatId == id) {
-                    msg = old;
-                    break;
-                }
-            }
-        } else {
-            chat.children = new SSect[0];
-        }
-        if (msg == null) {
-            msg = new SSect();
-            msg.entity.media = "chat-text-msg";
-            msg.entity.role = own ? "sent" : "recv";
-            msg.entity.name = status;
-            msg.title = new SEntity();
-            msg.title.media = "text";
-            msg.title.data = text;
-            msg.chatId = id;
-            msg.chatTimestamp = timestamp;
-            msg.padd("sender", sender);
-            msg.padd("receiver", receiver);
-            int len = chat.children.length;
-            SSect[] arr = Arrays.copyOf(chat.children, len+1);
-            arr[len] = msg;
-            Arrays.sort(arr, new Comparator<SSect>() {
-                @Override
-                public int compare(SSect msg1, SSect msg2) {
-                    if (msg1.chatTimestamp != msg2.chatTimestamp)
-                        return Long.compare(msg1.chatTimestamp, msg2.chatTimestamp);
-                    return Long.compare(msg1.chatId, msg2.chatId);
-                }
-            });
-            chat.children = arr;
-        } else {
-            msg.entity.name = status;
-            if (text != null && !text.isEmpty())
-                msg.title.data = text;
-        }
-        getRsvpFragment().play(chat);
+        ChatSectionsModel model = ChatSectionsModel.getChatModel(partner);
+        model.mergeChatMessage(jmsg);
     }
 
     @Override
@@ -300,8 +229,9 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
                     }
                 }
                 else if ("menu".equals(action)) {
-                    wholeMenuTree = SSect.fromJson(jobj);
-                    sessionID = wholeMenuTree.entity.val("session");
+                    UpStarsSectionsModel.get().setMenu(jobj);
+                    model = UpStarsSectionsModel.get();
+                    getRsvpFragment().play(UpStarsSectionsModel.get().currArticle());
                 }
                 else if ("stop".equals(action)) {
                     stopCurrentSect();
@@ -312,57 +242,12 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
             } catch (JSONException e) {
                 Log.e(TAG, "Bad json request", e);
             }
-        } else {
-            SSect sect = new SSect();
-            sect.title = new SEntity();
-            sect.title.media = "text";
-            sect.title.data = "Сайт UpStars";
-            sect.descr = new SEntity();
-            sect.descr.media = "text";
-            sect.descr.data = "Вы находитесь в большом, просторном, круглом зале сайта UpStars. " +
-                    "На высоком сводчатом потолке изображено звёздное небо с рисунками созвездий. " +
-                    "На стенах зала изображены Знаки Зодиака и Планеты в виде древних богов в " +
-                    "декорациях астрологических Домов. На изображениях видны поясняющие надписи.";
-            sect.hasArticle = true;
-            sect.entity.media = "text";
-            sect.entity.data = "Рядом с вами оказалась дежурная звёздочка-Гид. Вы можете обращаться " +
-                    "к ней за помощью для быстрого перемещения по этому сайту, или за пояснениями " +
-                    "по поводу астрологических терминов." +
-                    "\n" +
-                    "Недалеко от вас находится стенд с информацией для посетителей сайта, а левее " +
-                    "расположен вход в канцелярию, через которую вы сможете связаться с администрацией " +
-                    "сайта или заказать составление индивидуального гороскопа.";
-            SSect child0 = new SSect();
-            child0.title = new SEntity();
-            child0.title.media = "text";
-            child0.title.data = "О Планетах";
-            child0.descr = new SEntity();
-            child0.descr.media = "text";
-            child0.descr.data = "О Планетах";
-            SSect child1 = new SSect();
-            child1.title = new SEntity();
-            child1.title.media = "text";
-            child1.title.data = "Солнце";
-            child1.descr = new SEntity();
-            child1.descr.media = "text";
-            child1.descr.data = "Солнце в астрологии - центральная фигура, квинтэссенция гороскопа.";
-            SSect child2 = new SSect();
-            child2.title = new SEntity();
-            child2.title.media = "text";
-            child2.title.data = "Луна";
-            child2.descr = new SEntity();
-            child2.descr.media = "text";
-            child2.descr.data = "Вторая по степени важности фигура - Луна - в астрологии связана с воспринимающим началом в человеке.";
-            sect.children = new SSect[]{child0, child1, child2};
-            SectionsModel.instance.addSection(sect);
-            playCurrentSect();
         }
     }
 
     @Override
     protected void onResume() {
         super.onResume();
-        playCurrentSect();
     }
 
     @Override
@@ -422,7 +307,7 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     public void onClick(View v) {
         int id = v.getId();
         if (id == R.id.title)
-            showMenu(wholeMenuTree);
+            showMenu(model.getMenu());
         if (id == R.id.text || id == R.id.clock)
             startCardsActivity();
     }
@@ -570,7 +455,9 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
         Fragment fr = getFragmentManager().findFragmentByTag("menu");
         if (fr != null)
             getFragmentManager().beginTransaction().remove(fr).commit();
-        if (menu != null && "show".equals(menu.entity.data)) {
+        if (menu == null)
+            return;
+        if ("show".equals(menu.entity.data)) {
             String nodeId = pickBestNodeId();
             if (nodeId == null)
                 return;
@@ -581,6 +468,11 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
             }
             String reqData = action.serializeToCmd(sessionID, 0).toString();
             Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/action", reqData.getBytes(IOUtils.UTF8));
+        }
+        else if ("chat".equals(menu.entity.data)) {
+            model = ChatSectionsModel.getChatModel(menu.entity.val("room"));
+            getRsvpFragment().stop();
+            getRsvpFragment().setSiteTitle(model.currArticle().title.data);
         }
     }
 

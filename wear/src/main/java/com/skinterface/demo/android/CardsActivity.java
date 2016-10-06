@@ -16,12 +16,13 @@ public class CardsActivity extends WearableActivity {
 
     private TextView mTextView;
     private TextView mClockView;
+    private SectionsModel model;
     private GridViewPager mPager;
     private SectionsPagerAdapter mPagerAdapter;
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onCreate(Bundle saved) {
+        super.onCreate(saved);
         setContentView(R.layout.activity_cards);
         final WatchViewStub stub = (WatchViewStub) findViewById(R.id.watch_view_stub);
         stub.setOnLayoutInflatedListener(new WatchViewStub.OnLayoutInflatedListener() {
@@ -30,7 +31,7 @@ public class CardsActivity extends WearableActivity {
                 mTextView = (TextView) stub.findViewById(R.id.text);
                 mClockView = (TextView) stub.findViewById(R.id.clock);
                 mPager = (GridViewPager) findViewById(R.id.pager);
-                mPagerAdapter = new SectionsPagerAdapter(getFragmentManager(), SectionsModel.instance);
+                mPagerAdapter = new SectionsPagerAdapter(getFragmentManager(), model);
                 mPager.setAdapter(mPagerAdapter);
             }
         });
@@ -39,7 +40,7 @@ public class CardsActivity extends WearableActivity {
     @Override
     protected void onDestroy() {
         super.onDestroy();
-        SectionsModel.instance.removeSectionsListener(mPagerAdapter);
+        model.removeSectionsListener(mPagerAdapter);
     }
 
 }

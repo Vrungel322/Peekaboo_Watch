@@ -4,15 +4,12 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 
-public class SectionsModel {
+public abstract class SectionsModel {
 
     public interface SectionsListener {
         void onSectionsChanged();
     }
 
-    public static final SectionsModel instance = new SectionsModel();
-
-    private final CopyOnWriteArrayList<SSect> sections = new CopyOnWriteArrayList<>();
     private final CopyOnWriteArrayList<SectionsListener> listeners = new CopyOnWriteArrayList<>();
 
     public void addSectionsListener(SectionsListener l) {
@@ -25,26 +22,20 @@ public class SectionsModel {
             listeners.remove(l);
     }
 
-    public void addSection(SSect sect) {
-        sections.add(sect);
-        for (SectionsListener l : listeners)
-            l.onSectionsChanged();
+    protected void notifyDataChanged() {
+        for (SectionsListener l : listeners) {
+            if (l != null)
+                l.onSectionsChanged();
+        }
     }
 
-    public int size() {
-        return sections.size();
-    }
+    public abstract SSect getMenu();
 
-    public SSect get(int i) {
-        return sections.get(i);
-    }
+    public abstract SSect currArticle();
 
-    public SSect last() {
-        return sections.get(sections.size()-1);
-    }
+    public abstract int size();
 
-    public List<SSect> getSections() {
-        return Collections.unmodifiableList(sections);
-    }
+    public abstract SSect get(int i);
 
 }
+

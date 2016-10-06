@@ -183,32 +183,6 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             notificationManager.notify(notificationId, notificationBuilder.build());
             return true;
         }
-        if (id == R.id.rsvp_stop) {
-            if (mRsvpService != null) {
-                try {
-                    mRsvpService.post("stop", null, null);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Error sending a message to RsvpService", e);
-                }
-            }
-            return true;
-        }
-        if (id == R.id.rsvp_hello) {
-            if (mRsvpService != null) {
-                SSect sect = new SSect();
-                sect.title = new SEntity();
-                sect.title.media = "text";
-                sect.title.data = "Hello from handheld!";
-                sect.hasArticle = true;
-                sect.entity.media = "text";
-                sect.entity.data = "With the help of our site you can know the details and the underlying " +
-                        "reasons for relations with any person - a partner, a new sympathy, " +
-                        "an old friend, your child, and check the compatibility of the child " +
-                        "and the nanny, colleagues in the work group and so long, and so forth.";
-                postRsvpService("sect", sect);
-            }
-            return true;
-        }
         if (id == R.id.chat_connect) {
             if (mRsvpService != null) {
                 try {

@@ -41,10 +41,10 @@ import java.io.IOException;
 public class SoundRecorder {
 
     private static final String TAG = "SoundRecorder";
-    private static final int RECORDING_RATE = 22050;
-    private static final int CHANNEL_IN = AudioFormat.CHANNEL_IN_MONO;
-    private static final int CHANNELS_OUT = AudioFormat.CHANNEL_OUT_MONO;
-    private static final int FORMAT = AudioFormat.ENCODING_PCM_16BIT;
+    public static final int RECORDING_RATE = 22050;
+    public static final int CHANNEL_IN = AudioFormat.CHANNEL_IN_MONO;
+    public static final int CHANNELS_OUT = AudioFormat.CHANNEL_OUT_MONO;
+    public static final int FORMAT = AudioFormat.ENCODING_PCM_16BIT;
 
     private final String mOutputFileName;
     private final AudioManager mAudioManager;

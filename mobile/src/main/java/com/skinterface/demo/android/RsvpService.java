@@ -5,7 +5,9 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Log;
@@ -15,6 +17,8 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.CapabilityApi;
 import com.google.android.gms.wearable.CapabilityInfo;
+import com.google.android.gms.wearable.Channel;
+import com.google.android.gms.wearable.ChannelApi;
 import com.google.android.gms.wearable.MessageApi;
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.Node;
@@ -25,6 +29,7 @@ import com.peekaboo.presentation.services.ChatRequest;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
@@ -33,6 +38,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -40,7 +46,7 @@ import java.util.TreeMap;
 public class RsvpService extends Service implements
         GoogleApiClient.ConnectionCallbacks,
         GoogleApiClient.OnConnectionFailedListener,
-        CapabilityApi.CapabilityListener, MessageApi.MessageListener {
+        CapabilityApi.CapabilityListener, MessageApi.MessageListener, ChannelApi.ChannelListener {
 
     public static final String TAG = "RsvpService";
 
@@ -160,6 +166,7 @@ public class RsvpService extends Service implements
                 .build();
         mGoogleApiClient.connect();
         Wearable.MessageApi.addListener(mGoogleApiClient, this);
+        Wearable.ChannelApi.addListener(mGoogleApiClient, this);
     }
 
     @Override
@@ -234,21 +241,35 @@ public class RsvpService extends Service implements
     @Override
     public void onMessageReceived(MessageEvent msg) {
         Log.i(TAG, "received message from node: "+msg.getSourceNodeId()+", path: "+msg.getPath());
-        if ("/voice".equals(msg.getPath())) {
-            if (mChatService != null) {
-                byte[] data = msg.getData();
-                Map<String,String> params = new TreeMap<>();
-                params.put("rate", "22050");
-                params.put("fmt", "PCM16");
-                try {
-                    mChatService.post("voice", params, data);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Error sending voice", e);
+        Uri uri = Uri.parse(msg.getPath());
+        if ("chat".equals(uri.getScheme())) {
+            if ("post".equals(uri.getAuthority())) {
+                if (mChatService != null) {
+                    try {
+                        String path = uri.getPath();
+                        if (path.startsWith("/voice/")) {
+                            path = new File(getCacheDir(), path.substring(7)).getAbsolutePath();
+                            new File(path).setReadable(true, false);
+                        }
+                        Map<String,String> params = new TreeMap<>();
+                        params.put("audio", path);
+                        for (String p : uri.getQueryParameterNames())
+                            params.put(p, uri.getQueryParameter(p));
+                        String res = mChatService.post("post", params, new String(msg.getData(), utf8));
+                        if (res != null) {
+                            JSONObject jres = new JSONObject(res);
+                            jres.put("action", "chat");
+                            Wearable.MessageApi.sendMessage(mGoogleApiClient, msg.getSourceNodeId(), RSVP_MESSAGE_PATH, jres.toString().getBytes(utf8));
+                        }
+                    } catch (Exception e) {
+                        Log.e(TAG, "Error sending voice", e);
+                    }
                 }
+                return;
             }
-
         }
-        if ("/action".equals(msg.getPath())) {
+        if ("rsvp".equals(uri.getScheme())) {
+            if ("/action".equals(msg.getPath())) {
                 final String reqData = new String(msg.getData(), IOUtils.UTF8);
                 MainActivity.executor.execute(new Runnable() {
                     @Override
@@ -278,6 +299,29 @@ public class RsvpService extends Service implements
                     }
                 });
 
+            }
         }
+    }
+
+    @Override
+    public void onChannelOpened(Channel channel) {
+        String path = channel.getPath();
+        if (path.startsWith("/voice/")) {
+            File file = new File(getCacheDir(), path.substring(7));
+            channel.receiveFile(mGoogleApiClient, Uri.fromFile(file), false);
+            return;
+        }
+    }
+
+    @Override
+    public void onChannelClosed(Channel channel, int i, int i1) {
+    }
+
+    @Override
+    public void onInputClosed(Channel channel, int i, int i1) {
+    }
+
+    @Override
+    public void onOutputClosed(Channel channel, int i, int i1) {
     }
 }

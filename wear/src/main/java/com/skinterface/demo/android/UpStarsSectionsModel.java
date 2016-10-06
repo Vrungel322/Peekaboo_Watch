@@ -24,6 +24,10 @@ public class UpStarsSectionsModel extends SectionsModel {
         return site_menu;
     }
 
+    public String getSessionId() {
+        return sessionID;
+    }
+
     public SSect currArticle() {
         return curr_sect;
     }
@@ -38,6 +42,11 @@ public class UpStarsSectionsModel extends SectionsModel {
         if (curr_sect == null || curr_sect.children == null || i < 0 || i >= curr_sect.children.length)
             return null;
         return curr_sect.children[i];
+    }
+
+    public void enterRoom(SSect room) {
+        curr_sect = room;
+        notifyDataChanged();
     }
 
 }

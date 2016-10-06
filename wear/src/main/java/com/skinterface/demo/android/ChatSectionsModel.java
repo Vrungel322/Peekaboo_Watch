@@ -9,7 +9,7 @@ import java.util.concurrent.ConcurrentSkipListMap;
 
 public class ChatSectionsModel extends SectionsModel {
 
-    private static final SSect chatMenu;
+    static final SSect chatMenu;
     private static final HashMap<String,ChatSectionsModel> chatRooms = new HashMap<>();
     static {
         chatMenu = SSect.makeMenu("Peekaboo");

@@ -27,7 +27,6 @@ public class RsvpFragment extends Fragment implements
     private static final int STATE_CHILD   = 4;
 
     RsvpView mRsvpView;
-    TextView mTitleView;
     TextView mPositionView;
 
     SSect sect;
@@ -41,7 +40,6 @@ public class RsvpFragment extends Fragment implements
         view.findViewById(R.id.prev).setOnClickListener(this);
         mRsvpView = (RsvpView) view.findViewById(R.id.rsvp);
         mRsvpView.setListener(((WearActivity)getActivity()).handler);
-        mTitleView = (TextView) view.findViewById(R.id.title);
         mPositionView = (TextView) view.findViewById(R.id.position);
         return view;
     }
@@ -51,10 +49,6 @@ public class RsvpFragment extends Fragment implements
         super.onResume();
         if (state == STATE_INIT)
             onNext();
-    }
-
-    public void setSiteTitle(String title) {
-        mTitleView.setText(title);
     }
 
     public void play(SSect sect) {
@@ -215,7 +209,6 @@ public class RsvpFragment extends Fragment implements
         state = STATE_INIT;
         mRsvpView.stop(null);
         updatePosView(false);
-        return;
     }
 
     public void onRsvpPlayStart() {

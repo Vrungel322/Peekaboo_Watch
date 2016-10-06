@@ -13,14 +13,14 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-    <TextView
-        android:id="@+id/title"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:layout_gravity="center_horizontal|top"
-        android:textStyle="bold"
-        android:text="UpStars" />
+        <TextView
+            android:id="@+id/title"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:layout_gravity="center_horizontal|top"
+            android:textStyle="bold"
+            android:text="UpStars" />
 
         <fragment android:name="com.skinterface.demo.android.RsvpFragment"
                   android:id="@+id/fr_rsvp"
@@ -28,10 +28,5 @@
                   android:layout_height="match_parent" />
 
     </FrameLayout>
-
-    <android.support.wearable.view.DismissOverlayView
-        android:id="@+id/dismiss_overlay"
-        android:layout_height="match_parent"
-        android:layout_width="match_parent"/>
 
 </FrameLayout>

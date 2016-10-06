@@ -1,8 +1,9 @@
 package com.skinterface.demo.android;
 
 import android.Manifest;
-import android.app.Fragment;
 import android.content.Intent;
+import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
@@ -22,6 +23,7 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.CapabilityApi;
 import com.google.android.gms.wearable.CapabilityInfo;
+import com.google.android.gms.wearable.ChannelApi;
 import com.google.android.gms.wearable.MessageApi;
 import com.google.android.gms.wearable.Node;
 import com.google.android.gms.wearable.Wearable;
@@ -29,18 +31,27 @@ import com.google.android.gms.wearable.Wearable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.FileInputStream;
-import java.io.IOException;
 import java.util.Set;
+import java.util.concurrent.TimeUnit;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
 public class WearActivity extends WearableActivity implements View.OnClickListener {
     public static final String TAG = "SkinterWatch";
 
-    public static final String VOICE_FILE_NAME = "voice.wav";
+    public static final String VOICE_FILE_NAME = "voice.raw";
+
+    static final SSect chooseModelMenu;
+    static {
+        chooseModelMenu = SSect.makeMenu("Site");
+        chooseModelMenu.children = new SSect[] {
+                SSect.makeAction("UpStars", "upstars"),
+                SSect.makeAction("Peekaboo", "peekaboo"),
+        };
+    }
+
+    static final int REQUEST_MENU = 1000;
 
     static final int MSG_RSVP_PLAY_STARTED  = 1;
     static final int MSG_RSVP_PLAY_FINISHED = 2;
@@ -163,16 +174,17 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     @Override
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         Log.i(TAG, "onKeyUp: " + keyCode + " : " + event);
-        if (keyCode == KeyEvent.KEYCODE_STEM_2)
-            showMenu(model.getMenu());
+        if (keyCode == KeyEvent.KEYCODE_STEM_2) {
+            if (model == null || model.getMenu() == null)
+                showMenu(chooseModelMenu);
+            else
+                showMenu(model.getMenu());
+        }
         return super.onKeyUp(keyCode, event);
     }
 
     public RsvpFragment getRsvpFragment() {
         return (RsvpFragment)getFragmentManager().findFragmentById(R.id.fr_rsvp);
-    }
-    public WearMenuFragment getMenuFragment() {
-        return (WearMenuFragment)getFragmentManager().findFragmentByTag("menu");
     }
     public VoiceFragment getVoiceFragment() {
         return (VoiceFragment)getFragmentManager().findFragmentByTag("voice_confirm");
@@ -224,8 +236,10 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
                 if ("sect".equals(action)) {
                     SSect sect = SSect.fromJson(jobj);
                     if (sect != null) {
-                        SectionsModel.instance.addSection(sect);
-                        playCurrentSect();
+                        if (model instanceof UpStarsSectionsModel) {
+                            ((UpStarsSectionsModel) model).enterRoom(sect);
+                            playCurrentSect();
+                        }
                     }
                 }
                 else if ("menu".equals(action)) {
@@ -243,6 +257,16 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
                 Log.e(TAG, "Bad json request", e);
             }
         }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == REQUEST_MENU) {
+            if (resultCode == RESULT_OK)
+                exitMenu(SSect.fromJson(data.getStringExtra(WearMenuActivity.RESULT_EXTRA)));
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
@@ -306,8 +330,12 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     @Override
     public void onClick(View v) {
         int id = v.getId();
-        if (id == R.id.title)
-            showMenu(model.getMenu());
+        if (id == R.id.title) {
+            if (model == null || model.getMenu() == null)
+                showMenu(chooseModelMenu);
+            else
+                showMenu(model.getMenu());
+        }
         if (id == R.id.text || id == R.id.clock)
             startCardsActivity();
     }
@@ -322,43 +350,55 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
             getFragmentManager().beginTransaction().remove(fr).commit();
     }
 
-    public void sendVoiceConfirm(VoiceFragment fr) {
-        String nodeId = pickBestNodeId();
-        if (nodeId == null) {
-            if (fr != null)
-                fr.onDataSendFail();
-            return;
-        }
-        // TODO: should use DataApi + Asset
-        ByteArrayOutputStream bout = new ByteArrayOutputStream();
-        byte[] buffer = new byte[16*1024];
-        FileInputStream in = null;
-        try {
-            in = openFileInput(VOICE_FILE_NAME);
-            int read;
-            while ((read = in.read(buffer, 0, buffer.length)) > 0)
-                bout.write(buffer, 0, read);
-        } catch (IOException e) {
-            Log.e(TAG, "Failed to read the sound file into a byte array", e);
-            if (fr != null)
-                fr.onDataSendFail();
-            return;
-        } finally {
-            IOUtils.safeClose(in);
-        }
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/voice", bout.toByteArray())
-                .setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+    public void sendVoiceConfirm(final VoiceFragment fr) {
+        new AsyncTask<Void,Void,Boolean>() {
             @Override
-            public void onResult(@NonNull MessageApi.SendMessageResult result) {
-                VoiceFragment fr = getVoiceFragment();
-                if (fr != null) {
-                    if (result.getStatus().isSuccess())
-                        getFragmentManager().beginTransaction().remove(fr).commit();
-                    else
-                        fr.onDataSendFail();
+            protected Boolean doInBackground(Void... params) {
+                try {
+                    String nodeId = pickBestNodeId();
+                    if (nodeId == null)
+                        return Boolean.FALSE;
+                    long timestamp = System.currentTimeMillis();
+                    String path = "/voice/" + VOICE_FILE_NAME;
+                    ChannelApi.OpenChannelResult channelResult = Wearable.ChannelApi
+                            .openChannel(mGoogleApiClient, nodeId, path)
+                            .await(1000, TimeUnit.MILLISECONDS);
+                    if (!channelResult.getStatus().isSuccess())
+                        return Boolean.FALSE;
+                    Uri uri = Uri.fromFile(new File(getFilesDir(), VOICE_FILE_NAME));
+                    if (!channelResult.getChannel().sendFile(mGoogleApiClient, uri).await().isSuccess())
+                        return Boolean.FALSE;
+                    String post = new Uri.Builder()
+                            .scheme("chat")
+                            .authority("post")
+                            .path(path)
+                            .appendQueryParameter("fmt", "PCM16")
+                            .appendQueryParameter("rate", "" + SoundRecorder.RECORDING_RATE)
+                            .toString();
+                    JSONObject json = new JSONObject();
+                    json.put("timestamp", timestamp);
+                    json.put("receiver", null);
+                    json.put("sender", null);
+                    byte[] data = json.toString().getBytes(IOUtils.UTF8);
+                    MessageApi.SendMessageResult messageResult = Wearable.MessageApi
+                            .sendMessage(mGoogleApiClient, nodeId, post, data).await();
+                    if (!messageResult.getStatus().isSuccess())
+                        return Boolean.FALSE;
+                    return Boolean.TRUE;
+                } catch (Exception e) {
+                    Log.e(TAG, "Error during audio message post", e);
+                    return Boolean.FALSE;
                 }
             }
-        });
+
+            @Override
+            protected void onPostExecute(Boolean res) {
+                if (res == null || !res)
+                    fr.onDataSendFail();
+                else
+                    getFragmentManager().beginTransaction().remove(fr).commit();
+            }
+        }.execute();
     }
 
     public void onSoundRecFail() {
@@ -452,12 +492,26 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     }
 
     protected void exitMenu(final SSect menu) {
-        Fragment fr = getFragmentManager().findFragmentByTag("menu");
-        if (fr != null)
-            getFragmentManager().beginTransaction().remove(fr).commit();
         if (menu == null)
             return;
-        if ("show".equals(menu.entity.data)) {
+        if ("upstars".equals(menu.entity.data)) {
+            model = UpStarsSectionsModel.get();
+            mTitleView.setText("UpStars");
+            getRsvpFragment().stop();
+            String nodeId = pickBestNodeId();
+            if (nodeId == null)
+                return;
+            Action action = Action.create("hello");
+            String reqData = action.serializeToCmd(null, 0).toString();
+            Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/action", reqData.getBytes(IOUtils.UTF8));
+        }
+        else if ("peekaboo".equals(menu.entity.data)) {
+            model = null;
+            mTitleView.setText("Peekaboo");
+            getRsvpFragment().stop();
+            showMenu(ChatSectionsModel.chatMenu);
+        }
+        else if ("show".equals(menu.entity.data)) {
             String nodeId = pickBestNodeId();
             if (nodeId == null)
                 return;
@@ -466,27 +520,25 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
                 for (String key : menu.entity.props.keySet())
                     action.add(key, menu.entity.props.get(key));
             }
+            String sessionID = UpStarsSectionsModel.get().getSessionId();
             String reqData = action.serializeToCmd(sessionID, 0).toString();
             Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/action", reqData.getBytes(IOUtils.UTF8));
         }
         else if ("chat".equals(menu.entity.data)) {
             model = ChatSectionsModel.getChatModel(menu.entity.val("room"));
+            mTitleView.setText(model.currArticle().title.data);
             getRsvpFragment().stop();
-            getRsvpFragment().setSiteTitle(model.currArticle().title.data);
         }
     }
 
-    protected void showMenu(final SSect action) {
+    protected void showMenu(final SSect menu) {
         stopCurrentSect();
-        if (action == null)
+        if (menu == null)
             return;
-        if (action.children != null && action.children.length > 0) {
-            WearMenuFragment fr = WearMenuFragment.create(wholeMenuTree);
-            getFragmentManager().beginTransaction().add(R.id.container, fr, "menu").commit();
-        }
-        else if (action.entity.data != null) {
-            exitMenu(action);
-        }
+        if (menu.children != null && menu.children.length > 0)
+            WearMenuActivity.startForResult(REQUEST_MENU, this, menu);
+        else if (menu.entity.data != null)
+            exitMenu(menu);
     }
 
 

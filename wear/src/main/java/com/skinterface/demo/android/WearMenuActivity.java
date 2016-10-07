@@ -40,7 +40,7 @@ public class WearMenuActivity extends WearableActivity implements WearableListVi
 
         wholeMenu = SSect.fromJson(getIntent().getStringExtra("menu"));
         if (wholeMenu == null)
-            wholeMenu = WearActivity.chooseModelMenu;
+            wholeMenu = SiteNavigator.chooseModelMenu;
 
         adapter = new Adapter(this, wholeMenu);
         titleView = (TextView) findViewById(R.id.wear_menu_title);
@@ -85,12 +85,12 @@ public class WearMenuActivity extends WearableActivity implements WearableListVi
     public void onTopEmptyRegionClick() {
         SSect sect = findParentMenu(wholeMenu, adapter.mMenu);
         if (sect == null) {
-            if (wholeMenu == WearActivity.chooseModelMenu) {
+            if (wholeMenu == SiteNavigator.chooseModelMenu) {
                 setResult(RESULT_CANCELED, new Intent());
                 finish();
                 return;
             }
-            wholeMenu = WearActivity.chooseModelMenu;
+            wholeMenu = SiteNavigator.chooseModelMenu;
             sect = wholeMenu;
         }
         adapter.setCurrentMenu(sect);

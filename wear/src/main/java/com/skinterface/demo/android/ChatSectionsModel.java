@@ -45,10 +45,6 @@ public class ChatSectionsModel extends SectionsModel {
         this.chat_room = chat_room;
     }
 
-    public SSect getMenu() {
-        return chatMenu;
-    }
-
     public SSect currArticle() {
         return chat_room;
     }

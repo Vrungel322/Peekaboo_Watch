@@ -51,6 +51,13 @@ public class RsvpFragment extends Fragment implements
             onNext();
     }
 
+    public void reset() {
+        this.state = STATE_INIT;
+        this.sect = null;
+        this.words = null;
+        onNext();
+    }
+
     public void play(SSect sect) {
         if (this.sect == sect)
             return;

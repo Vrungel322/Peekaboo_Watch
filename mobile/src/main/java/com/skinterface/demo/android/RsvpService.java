@@ -51,7 +51,6 @@ public class RsvpService extends Service implements
     public static final String ACTION_CONNECTIONS_CHANGED = "action.connections_changed";
 
     public static final String RSVP_CAPABILITY = "rsvp_demo";
-    public static final String RSVP_MESSAGE_PATH = "/rsvp_demo";
 
     public static class RsvpNode implements Node {
         public static RsvpNode[] emptyArray = new RsvpNode[0];
@@ -119,45 +118,18 @@ public class RsvpService extends Service implements
     };
 
 
-    RsvpRequest.Stub mBinder = new RsvpRequest.Stub() {
-        @Override
-        public String post(String action, Map params, String data) throws RemoteException {
-            if ("sect".equals(action) || "menu".equals(action)) {
-                requestPlay(action, SSect.fromJson(data));
-                return "true";
-            }
-            else if ("stop".equals(action)) {
-                requestPlay(action, null);
-                return "true";
-            }
-            else if ("chat-connect".equals(action)) {
-                chatConnect();
-                return "true";
-            }
-            else if ("chat-disconnect".equals(action)) {
-                chatDisconnect();
-                return "true";
-            }
-            return "false";
-        }
-    };
-
     @Override
     public IBinder onBind(Intent intent) {
-        return mBinder;
+        return null;
     }
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         if ("com.skinterface.demo.android.BindToChat".equals(intent.getAction())) {
-            if (mChatService == null) {
-                Intent bi = new Intent();
-                bi.setAction(Intent.ACTION_MAIN);
-                bi.setComponent(new ComponentName(
-                        "com.peekaboo", "com.peekaboo.presentation.services.WearLink"));
-                bindService(bi, mChatConnection, Context.BIND_AUTO_CREATE);
-            }
-
+            chatConnect();
+        }
+        else if ("com.skinterface.demo.android.UnBindChat".equals(intent.getAction())) {
+            chatDisconnect();
         }
         return START_STICKY;
     }
@@ -287,19 +259,6 @@ public class RsvpService extends Service implements
         return bestNodeId;
     }
 
-    final void requestPlay(String action, SSect sect) {
-        String nodeId = pickBestNodeId();
-        if (nodeId == null)
-            return;
-        JSONObject json = new JSONObject();
-        try {
-            json.put("action", action);
-            if (sect != null)
-                sect.fillJson(json);
-        } catch (JSONException e) {}
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, json.toString().getBytes(IOUtils.UTF8));
-    }
-
     final void requestChat(JSONObject message) {
         String nodeId = pickBestNodeId();
         if (nodeId == null || message == null || message == JSONObject.NULL)
@@ -307,69 +266,64 @@ public class RsvpService extends Service implements
         try {
             message.put("action", "chat");
         } catch (JSONException e) {}
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, message.toString().getBytes(IOUtils.UTF8));
+        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, message.toString().getBytes(IOUtils.UTF8));
     }
 
     @SuppressLint("SetWorldReadable")
     @Override
-    public void onMessageReceived(MessageEvent msg) {
+    public void onMessageReceived(final MessageEvent msg) {
         Log.i(TAG, "received message from node: "+msg.getSourceNodeId()+", path: "+msg.getPath());
         Uri uri = Uri.parse(msg.getPath());
-        if ("chat".equals(uri.getScheme())) {
-            if ("post".equals(uri.getAuthority())) {
-                if (mChatService != null) {
-                    try {
-                        String path = uri.getPath();
-                        if (path.startsWith("/voice/")) {
-                            path = new File(getCacheDir(), path.substring(7)).getAbsolutePath();
-                            new File(path).setReadable(true, false);
-                        }
-                        Map<String,String> params = new TreeMap<>();
-                        params.put("audio", path);
-                        for (String p : uri.getQueryParameterNames())
-                            params.put(p, uri.getQueryParameter(p));
-                        String res = mChatService.post("post", params, new String(msg.getData(), IOUtils.UTF8));
-                        if (res != null) {
-                            JSONObject jres = new JSONObject(res);
-                            jres.put("action", "chat");
-                            Wearable.MessageApi.sendMessage(mGoogleApiClient, msg.getSourceNodeId(), RSVP_MESSAGE_PATH, jres.toString().getBytes(IOUtils.UTF8));
-                        }
-                    } catch (Exception e) {
-                        Log.e(TAG, "Error sending voice", e);
+        if (msg.getPath().startsWith(IOUtils.CHAT_POST_PATH)) {
+            if (mChatService != null) {
+                try {
+                    String path = uri.getPath().substring(IOUtils.CHAT_POST_PATH.length());
+                    if (path.startsWith("/voice/")) {
+                        path = new File(getCacheDir(), path.substring(7)).getAbsolutePath();
+                        new File(path).setReadable(true, false);
                     }
+                    Map<String,String> params = new TreeMap<>();
+                    params.put("audio", path);
+                    for (String p : uri.getQueryParameterNames())
+                        params.put(p, uri.getQueryParameter(p));
+                    String res = mChatService.post("post", params, new String(msg.getData(), IOUtils.UTF8));
+                    if (res != null) {
+                        JSONObject jres = new JSONObject(res);
+                        jres.put("action", "chat");
+                        Wearable.MessageApi.sendMessage(mGoogleApiClient, msg.getSourceNodeId(), IOUtils.RSVP_ACTION_PATH, jres.toString().getBytes(IOUtils.UTF8));
+                    }
+                } catch (Exception e) {
+                    Log.e(TAG, "Error sending voice", e);
                 }
-                return;
             }
+            return;
         }
-        if ("rsvp".equals(uri.getScheme())) {
-            if ("/action".equals(msg.getPath())) {
-                final String reqData = new String(msg.getData(), IOUtils.UTF8);
-                MainActivity.executor.execute(new Runnable() {
-                    @Override
-                    public void run() {
-                        try {
-                            URL url = new URL(MainActivity.JSON_URL);
-                            HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                            conn.setReadTimeout(5000);
-                            conn.setConnectTimeout(5000);
-                            conn.setRequestMethod("POST");
-                            conn.setDoInput(true);
-                            OutputStream os = conn.getOutputStream();
-                            os.write(reqData.getBytes(IOUtils.UTF8));
-                            os.close();
-                            conn.connect();
-                            JSONObject jobj = IOUtils.parseHTTPResponce(conn);
-                            if (jobj != null) {
-                                SSect sect = SSect.fromJson(jobj);
-                                requestPlay("sect", sect);
-                            }
-                        } catch (Throwable e) {
-                            Log.e(TAG, "Server connection error", e);
-                        }
+        if (msg.getPath().startsWith(IOUtils.RSVP_ACTION_PATH)) {
+            final String reqData = new String(msg.getData(), IOUtils.UTF8);
+            MainActivity.executor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    byte[] responce = null;
+                    try {
+                        URL url = new URL(IOUtils.UpStars_JSON_URL);
+                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                        conn.setReadTimeout(5000);
+                        conn.setConnectTimeout(5000);
+                        conn.setRequestMethod("POST");
+                        conn.setDoInput(true);
+                        OutputStream os = conn.getOutputStream();
+                        os.write(reqData.getBytes(IOUtils.UTF8));
+                        os.close();
+                        conn.connect();
+                        JSONObject jobj = IOUtils.parseHTTPResponce(conn);
+                        if (jobj != null)
+                            responce = jobj.toString().getBytes(IOUtils.UTF8);
+                    } catch (Throwable e) {
+                        Log.e(TAG, "Server connection error", e);
                     }
-                });
-
-            }
+                    Wearable.MessageApi.sendMessage(mGoogleApiClient, msg.getSourceNodeId(), IOUtils.RSVP_REPLAY_PATH+msg.getRequestId(), responce);
+                }
+            });
         }
     }
 

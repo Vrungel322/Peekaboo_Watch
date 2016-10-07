@@ -34,24 +34,23 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.OutputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
-public class WearActivity extends WearableActivity implements View.OnClickListener {
+public class WearActivity extends WearableActivity implements
+        View.OnClickListener,
+        SiteNavigator.SrvClient
+{
     public static final String TAG = "SkinterWatch";
 
     public static final String VOICE_FILE_NAME = "voice.raw";
-
-    static final SSect chooseModelMenu;
-    static {
-        chooseModelMenu = SSect.makeMenu("Site");
-        chooseModelMenu.children = new SSect[] {
-                SSect.makeAction("UpStars", "upstars"),
-                SSect.makeAction("Peekaboo", "peekaboo"),
-        };
-    }
 
     static final int REQUEST_MENU = 1000;
 
@@ -110,6 +109,8 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
 
     private Set<Node> mVoiceNodes;
     private GoogleApiClient mGoogleApiClient;
+
+    final SiteNavigator nav = new SiteNavigator(this);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -177,10 +178,7 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         Log.i(TAG, "onKeyUp: " + keyCode + " : " + event);
         if (keyCode == KeyEvent.KEYCODE_STEM_2) {
-            if (model == null || model.getMenu() == null)
-                showMenu(chooseModelMenu);
-            else
-                showMenu(model.getMenu());
+            nav.doShowMenu();
         }
         return super.onKeyUp(keyCode, event);
     }
@@ -245,7 +243,6 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
                     }
                 }
                 else if ("menu".equals(action)) {
-                    UpStarsSectionsModel.get().setMenu(jobj);
                     model = UpStarsSectionsModel.get();
                     getRsvpFragment().play(UpStarsSectionsModel.get().currArticle());
                 }
@@ -333,10 +330,7 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
     public void onClick(View v) {
         int id = v.getId();
         if (id == R.id.title) {
-            if (model == null || model.getMenu() == null)
-                showMenu(chooseModelMenu);
-            else
-                showMenu(model.getMenu());
+            nav.doShowMenu();
         }
         if (id == R.id.text || id == R.id.clock)
             startCardsActivity();
@@ -371,9 +365,7 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
                     if (!channelResult.getChannel().sendFile(mGoogleApiClient, uri).await().isSuccess())
                         return Boolean.FALSE;
                     String post = new Uri.Builder()
-                            .scheme("chat")
-                            .authority("post")
-                            .path(path)
+                            .path(IOUtils.CHAT_POST_PATH+path)
                             .appendQueryParameter("fmt", "PCM16")
                             .appendQueryParameter("rate", "" + SoundRecorder.RECORDING_RATE)
                             .toString();
@@ -499,32 +491,17 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
         if ("upstars".equals(menu.entity.data)) {
             model = UpStarsSectionsModel.get();
             mTitleView.setText("UpStars");
-            getRsvpFragment().stop();
-            String nodeId = pickBestNodeId();
-            if (nodeId == null)
-                return;
-            Action action = Action.create("hello");
-            String reqData = action.serializeToCmd(null, 0).toString();
-            Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/action", reqData.getBytes(IOUtils.UTF8));
+            getRsvpFragment().reset();
+            nav.doHello();
         }
         else if ("peekaboo".equals(menu.entity.data)) {
             model = null;
             mTitleView.setText("Peekaboo");
-            getRsvpFragment().stop();
+            getRsvpFragment().reset();
             showMenu(ChatSectionsModel.chatMenu);
         }
         else if ("show".equals(menu.entity.data)) {
-            String nodeId = pickBestNodeId();
-            if (nodeId == null)
-                return;
-            Action action = Action.create(menu.entity.data);
-            if (menu.entity.props != null) {
-                for (String key : menu.entity.props.keySet())
-                    action.add(key, menu.entity.props.get(key));
-            }
-            String sessionID = UpStarsSectionsModel.get().getSessionId();
-            String reqData = action.serializeToCmd(sessionID, 0).toString();
-            Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, "/action", reqData.getBytes(IOUtils.UTF8));
+            nav.makeActionHandler(menu.entity).run();
         }
         else if ("chat".equals(menu.entity.data)) {
             model = ChatSectionsModel.getChatModel(menu.entity.val("room"));
@@ -533,7 +510,8 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
         }
     }
 
-    protected void showMenu(final SSect menu) {
+    @Override
+    public void showMenu(final SSect menu) {
         stopCurrentSect();
         if (menu == null)
             return;
@@ -543,5 +521,60 @@ public class WearActivity extends WearableActivity implements View.OnClickListen
             exitMenu(menu);
     }
 
+    @Override
+    public SiteNavigator.ActionHandler makeActionHandler(Action action) {
+        return new ActionHandler(nav, this, action);
+    }
 
+    @Override
+    public void enterToRoom(SSect sect) {
+        UpStarsSectionsModel.get().enterRoom(sect);
+        getRsvpFragment().play(sect);
+    }
+
+    @Override
+    public void returnToRoom(SSect sect) {
+        UpStarsSectionsModel.get().enterRoom(sect);
+        getRsvpFragment().play(sect);
+    }
+
+    @Override
+    public void showWhereAmIData(SSect sect) {
+        UpStarsSectionsModel.get().enterRoom(sect);
+        getRsvpFragment().play(sect);
+    }
+
+    @Override
+    public void serverCmd(Action action, final SiteNavigator.SrvCallback callback) {
+        String nodeId = pickBestNodeId();
+        if (nodeId == null)
+            return;
+        String reqData = action.serializeToCmd(nav.sessionID, 0).toString();
+        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, reqData.getBytes(IOUtils.UTF8))
+                .setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+            @Override
+            public void onResult(@NonNull MessageApi.SendMessageResult sendMessageResult) {
+                if (sendMessageResult.getStatus().isSuccess())
+                    RsvpMessageService.addPendingRequest(sendMessageResult.getRequestId(), callback);
+            }
+        });
+    }
+
+    protected class ActionHandler extends SiteNavigator.BaseActionHandler {
+        protected ActionHandler(SiteNavigator nav, SiteNavigator.SrvClient client, Action action) {
+            super(nav, client, action);
+        }
+        public void run() {
+            String act = action.getAction();
+            if ("list".equals(act)) {
+            }
+            else if ("descr".equals(act)) {
+            }
+            else if ("read".equals(act)) {
+            }
+            else {
+                super.run();
+            }
+        }
+    }
 }

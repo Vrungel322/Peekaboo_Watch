@@ -8,24 +8,9 @@ public class UpStarsSectionsModel extends SectionsModel {
 
     public static UpStarsSectionsModel get() { return model; }
 
-    private static String sessionID;
-    private static SSect site_menu;
     private static SSect curr_sect;
 
     private UpStarsSectionsModel() {
-    }
-
-    public void setMenu(JSONObject jobj) {
-        site_menu = SSect.fromJson(jobj);
-        sessionID = site_menu.entity.val("session");
-    }
-
-    public SSect getMenu() {
-        return site_menu;
-    }
-
-    public String getSessionId() {
-        return sessionID;
     }
 
     public SSect currArticle() {

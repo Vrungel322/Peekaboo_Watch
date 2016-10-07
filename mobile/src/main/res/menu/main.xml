@@ -5,29 +5,27 @@
     <item android:title="Watch"
           android:icon="@drawable/ic_watch_black_24dp"
           app:showAsAction="always"
-          android:id="@+id/connections_watch"/>
+          android:id="@+id/connections_watch" />
     <item android:title="Chat"
           android:icon="@drawable/ic_chat_black_24dp"
           app:showAsAction="always"
-          android:id="@+id/connections_chat"/>
-    <item android:title="Notify Watch"
-        android:checkable="false"
-        android:id="@+id/rsvp_notify"/>
-    <group android:checkableBehavior="single" android:id="@+id/grp2">
-        <item android:title="Hello UpStars"
-            android:checkable="false"
-            android:id="@+id/sf_hello"
-            />
-        <item android:title="UpStars: Look Around"
-            android:checkable="false"
-            android:id="@+id/sf_where"
-            />
-        <item android:title="UpStars: Guide"
-            android:checkable="false"
-            android:id="@+id/sf_menu"
-            />
-    </group>
-    <item android:title="Process TTS files"
-          android:id="@+id/run_tts"
-        />
+          android:id="@+id/connections_chat" />
+    <item android:title="Settings"
+          android:icon="@drawable/ic_more_vert_black_24dp"
+          app:showAsAction="always"
+          android:id="@+id/action_settings" >
+        <menu>
+            <item android:title="Notify Watch"
+                  android:icon="@drawable/ic_alarm_black_24dp"
+                  app:showAsAction="always"
+                  android:id="@+id/watch_notify" />
+            <item android:title="Hello UpStars"
+                  android:icon="@drawable/ic_flare_black_24dp"
+                  app:showAsAction="always"
+                  android:id="@+id/sf_hello" />
+            <item android:title="Process TTS files"
+                  android:visible="false"
+                  android:id="@+id/run_tts" />
+        </menu>
+    </item>
 </menu>

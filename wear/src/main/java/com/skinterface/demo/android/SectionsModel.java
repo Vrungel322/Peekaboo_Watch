@@ -29,8 +29,6 @@ public abstract class SectionsModel {
         }
     }
 
-    public abstract SSect getMenu();
-
     public abstract SSect currArticle();
 
     public abstract int size();

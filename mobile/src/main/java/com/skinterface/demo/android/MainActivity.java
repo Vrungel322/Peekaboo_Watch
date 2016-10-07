@@ -2,20 +2,16 @@ package com.skinterface.demo.android;
 
 import android.Manifest;
 import android.content.BroadcastReceiver;
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.ServiceConnection;
 import android.graphics.Typeface;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
 import android.os.Handler;
-import android.os.IBinder;
 import android.os.Looper;
-import android.os.RemoteException;
 import android.speech.tts.TextToSpeech;
 import android.speech.tts.UtteranceProgressListener;
 import android.speech.tts.Voice;
@@ -43,12 +39,6 @@ import android.widget.ImageButton;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
-import com.google.android.gms.wearable.Node;
-
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.json.JSONTokener;
-
 import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
@@ -58,10 +48,8 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Locale;
@@ -73,29 +61,17 @@ import java.util.concurrent.ScheduledExecutorService;
 
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
-public class MainActivity extends AppCompatActivity implements View.OnClickListener, Action.ActionExecutor
+public class MainActivity extends AppCompatActivity implements
+        View.OnClickListener,
+        SiteNavigator.SrvClient
 {
 
     public static final String TAG = "SkinterPhone";
 
-    final static Charset utf8 = Charset.forName("UTF-8");
-
     static final int CAPS = 0;
-    static final String JSON_URL = "http://u-com.pro/UpStars/Service";
-    //static final String JSON_URL = "http://192.168.2.157:8080/UpStars/Service";
 
     final static ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
     final Handler handler = new Handler(Looper.getMainLooper());
-
-    private RsvpRequest mRsvpService;
-    private ServiceConnection mRsvpConnection = new ServiceConnection() {
-        public void onServiceConnected(ComponentName className, IBinder service) {
-            mRsvpService = RsvpRequest.Stub.asInterface(service);
-        }
-        public void onServiceDisconnected(ComponentName className) {
-            mRsvpService = null;
-        }
-    };
 
     ScrollView mainTextScroller;
     TextView tvText;
@@ -103,13 +79,10 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     RecyclerView rvChildren;
     ImageButton btnForward;
 
-    String sessionID;
+    final SiteNavigator nav = new SiteNavigator(this);
+    // Session storage
     Map<String,String> storage = new HashMap<>();
-
-    // Loaded site menu
-    SSect wholeMenuTree;
-    // Current data
-    SSect currentData;
+    // Current default next action
     SSect actionAutoNext;
     // describes what was just presented (shown, read) to user
     int justRead;
@@ -145,12 +118,11 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         rvChildren.setLayoutManager(new LinearLayoutManager(this));
         rvChildren.setHasFixedSize(false);
         rvChildren.setVisibility(View.GONE);
-        setButtonEnabled(R.id.sf_menu, false);
         setButtonEnabled(R.id.sf_return_up, false);
         setButtonEnabled(R.id.sf_descr, false);
         actionAutoNext = SSect.makeAction("Continue: Hello UpStars", "hello");
         btnForward = (ImageButton) findViewById(R.id.sf_next_auto);
-        btnForward.setImageResource(R.drawable.ic_touch_app_black_48dp);
+        btnForward.setImageResource(R.drawable.ic_flare_black_48dp);
         btnForward.setOnClickListener(this);
 
         IntentFilter intentFilter = new IntentFilter();
@@ -232,7 +204,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             builder.show();
             return true;
         }
-        if (id == R.id.rsvp_notify) {
+        if (id == R.id.watch_notify) {
             int notificationId = 1;
             // Build intent for notification content
             //Intent viewIntent = new Intent(this, MainActivity.class);
@@ -258,60 +230,32 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             return true;
         }
         if (id == R.id.connections_chat) {
-            if (mRsvpService != null) {
-                try {
-                    if (RsvpService.mChatService != null)
-                        mRsvpService.post("chat-disconnect", null, null);
-                    else
-                        mRsvpService.post("chat-connect", null, null);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Error sending a message to RsvpService", e);
-                }
-            }
+            Intent si = new Intent(this, RsvpService.class);
+            if (RsvpService.mChatService == null)
+                si.setAction("com.skinterface.demo.android.BindToChat");
+            else
+                si.setAction("com.skinterface.demo.android.UnBindChat");
+            startService(si);
             return true;
         }
         if (id == R.id.sf_hello) {
-            String lang = Locale.getDefault().getLanguage();
-            Action hello = Action.create("hello");
-            hello.add("lang", lang);
-            serverCmd(hello, new SrvCallback() {
-                @Override
-                public void onSuccess(String result) {
-                    if (result == null || result.length() == 0)
-                        return;
-                    Object obj = null;
-                    try {
-                        JSONTokener tokener = new JSONTokener(result);
-                        obj = tokener.nextValue();
-                    } catch (JSONException e) {
-                        return;
-                    }
-                    if (!(obj instanceof JSONObject) || obj == JSONObject.NULL)
-                        return;
-                    JSONObject jobj = (JSONObject) obj;
-                    String id = jobj.optString("session");
-                    if (sessionID == null || !sessionID.equals(result))
-                        sessionID = id;
-                    executeAction(new Action("menu").add("sectID", "site-nav-menu"));
-                    executeAction(new Action("home"));
-                }
-            });
+            nav.doHello();
         }
         if (id == R.id.sf_menu) {
-            showMenu(wholeMenuTree);
+            showMenu(nav.wholeMenuTree);
             return true;
         }
-        if (id == R.id.sf_where || id == R.id.sf_descr) {
-            executeAction(new Action("descr"));
+        if (id == R.id.sf_descr) {
+            nav.executeAction(new Action("descr"));
             return true;
         }
         if (id == R.id.sf_next_auto) {
             if (actionAutoNext != null)
-                makeActionHandler(actionAutoNext.entity).run();
+                nav.makeActionHandler(actionAutoNext.entity).run();
             return true;
         }
         if (id == R.id.sf_return_up) {
-            executeAction(new Action("return-up"));
+            nav.executeAction(new Action("return-up"));
             return true;
         }
         if (id == R.id.run_tts) {
@@ -326,7 +270,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         return false;
     }
 
-    void setStatus(final String text) {
+    private void setStatus(final String text) {
         if (Looper.getMainLooper().getThread() == Thread.currentThread()) {
             if (text == null || text.length() == 0) {
                 tvStatus.setText("");
@@ -346,35 +290,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     @Override
-    protected void onStart() {
-        super.onStart();
-        bindService(new Intent(this, RsvpService.class), mRsvpConnection, Context.BIND_AUTO_CREATE);
-    }
-
-    @Override
-    protected void onStop() {
-        super.onStop();
-        if (mRsvpService != null) {
-            unbindService(mRsvpConnection);
-            mRsvpService = null;
-        }
-    }
-
-    public void executeAction(Action action) {
-        makeActionHandler(action).run();
-    }
-
-    protected Runnable makeActionHandler(Action action) {
-        return new ActionHandler(action);
-    }
-
-    protected Runnable makeActionHandler(SEntity entity) {
-        Action action = Action.create(entity.data);
-        if (entity.props != null) {
-            for (String key : entity.props.keySet())
-                action.add(key, entity.props.get(key));
-        }
-        return new ActionHandler(action);
+    public ActionHandler makeActionHandler(Action action) {
+        return new ActionHandler(nav, this, action);
     }
 
     boolean introWasShown(SSect ds) {
@@ -408,8 +325,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     void fillCommands() {
         actionAutoNext = null;
-        if (this.currentData != null) {
-            SSect ds = this.currentData;
+        final SSect ds = nav.currentData;
+        if (ds != null) {
             SSect theNext = SSect.makeAction("Continue: Guide", "show-menu");
             {
                 setButtonEnabled(R.id.sf_return_up, ds.returnUp != null);
@@ -424,7 +341,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         theNext = SSect.makeAction("Continue: UP+Next", "auto-next-up");
                     }
                 }
-                setButtonEnabled(R.id.sf_descr, currentData.descr != null);
+                setButtonEnabled(R.id.sf_descr, ds.descr != null);
                 if (ds.hasArticle) {
                     if (!ds.nextAsSkip && (justRead & RsvpWords.JR_ARTICLE) == 0)
                         theNext = SSect.makeAction("Continue: Read", "read");
@@ -486,10 +403,59 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         }
     }
 
-    class ActionHandler implements Runnable {
-        Action action;
-        ActionHandler(Action action) {
-            this.action = action;
+    @Override
+    public void serverCmd(Action action, final SiteNavigator.SrvCallback callback) {
+        final  String reqData = action.serializeToCmd(nav.sessionID, CAPS).toString();
+        executor.execute(new Runnable() {
+            @Override
+            public void run() {
+                InputStream is = null;
+                try {
+                    URL url = new URL(IOUtils.UpStars_JSON_URL);
+                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                    conn.setReadTimeout(5000);
+                    conn.setConnectTimeout(5000);
+                    conn.setRequestMethod("POST");
+                    conn.setDoInput(true);
+                    OutputStream os = conn.getOutputStream();
+                    os.write(reqData.getBytes(IOUtils.UTF8));
+                    os.close();
+                    // Starts the query
+                    conn.connect();
+                    int response = conn.getResponseCode();
+                    Log.d(TAG, "The response is: " + conn.getResponseMessage());
+                    if (response == 200) {
+                        StringBuilder sb = new StringBuilder();
+                        is = conn.getInputStream();
+                        InputStreamReader reader = new InputStreamReader(is, IOUtils.UTF8);
+                        char[] buffer = new char[4096];
+                        int sz;
+                        while ((sz = reader.read(buffer)) > 0)
+                            sb.append(buffer, 0, sz);
+                        reader.close();
+                        final String result = sb.toString();
+                        handler.post(new Runnable() {
+                            @Override
+                            public void run() {
+                                callback.onSuccess(result);
+                            }
+                        });
+                    } else {
+                        setStatus("Error on server request");
+                    }
+                } catch (Throwable e) {
+                    Log.e(TAG, "Server connection error", e);
+                    setStatus("Error on server request");
+                } finally {
+                    IOUtils.safeClose(is);
+                }
+            }
+        });
+    }
+
+    protected class ActionHandler extends SiteNavigator.BaseActionHandler {
+        protected ActionHandler(SiteNavigator nav, SiteNavigator.SrvClient client, Action action) {
+            super(nav, client, action);
         }
         public void run() {
             setStatus("");
@@ -497,182 +463,38 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             if ("list".equals(act)) {
                 titleChildAt(0);
             }
-            else if ("enter".equals(act)) {
-                enterDown(currentData, action);
-            }
-            else if ("return-up".equals(act)) {
-                returnUp(currentData, 0);
-            }
-            else if ("auto-next-up".equals(act)) {
-                returnUp(currentData, +1);
-            }
-            else if ("sibling-next".equals(act)) {
-                returnUp(currentData, +1);
-            }
-            else if ("sibling-prev".equals(act)) {
-                returnUp(currentData, -1);
-            }
-            else if ("stop".equals(act)) {
-                if (currentData != null)
-                    currentData.currListPosition = -1;
-                enterToRoom(currentData);
-            }
             else if ("descr".equals(act)) {
                 RsvpWords words = new RsvpWords()
-                        .addTitleWords(currentData.title)
+                        .addTitleWords(nav.currentData.title)
                         .addPause()
-                        .addIntroWords(currentData.descr);
-                introSetShown(currentData, true);
-                currentData.currListPosition = -1;
+                        .addIntroWords(nav.currentData.descr);
+                introSetShown(nav.currentData, true);
+                nav.currentData.currListPosition = -1;
                 play(words);
                 fillCommands();
                 stopVoice();
-                playVoice(currentData.title);
-                playVoice(currentData.descr);
+                playVoice(nav.currentData.title);
+                playVoice(nav.currentData.descr);
             }
             else if ("read".equals(act)) {
                 stopVoice();
-                currentData.currListPosition = -1;
+                nav.currentData.currListPosition = -1;
                 RsvpWords words = new RsvpWords();
-                words.addTitleWords(currentData.title).addPause();
-                playVoice(currentData.title);
-                if (currentData.hasArticle) {
-                    words.addArticleWords(currentData.entity);
-                    playVoice(currentData.entity);
+                words.addTitleWords(nav.currentData.title).addPause();
+                playVoice(nav.currentData.title);
+                if (nav.currentData.hasArticle) {
+                    words.addArticleWords(nav.currentData.entity);
+                    playVoice(nav.currentData.entity);
                 } else {
-                    words.addIntroWords(currentData.descr);
-                    playVoice(currentData.descr);
+                    words.addIntroWords(nav.currentData.descr);
+                    playVoice(nav.currentData.descr);
                 }
                 play(words);
                 fillCommands();
             }
-            else if ("action".equals(act)) {
-                if (currentData.isAction) {
-                    makeActionHandler(currentData.entity).run();
-                }
+            else {
+                super.run();
             }
-            else if ("set".equals(act)) {
-                serverCmd(action, new SrvCallback() {
-                    @Override
-                    public void onSuccess(String result) {
-                        //if (result != null)
-                        //    executeAction(result);
-                    }
-                });
-            }
-            else if ("where".equals(act)) {
-                if (currentData != null) {
-                    showWhereAmIData(currentData);
-                }
-                else {
-                    play(new RsvpWords().addWarning("Place is not known"));
-                }
-            }
-            else if ("show".equals(act) || "home".equals(act) || "update".equals(act)) {
-                if (action.val("position") != null) {
-                    if (currentData != null)
-                        currentData.currListPosition = Integer.parseInt(action.val("position"));
-                    action.del("position");
-                }
-                serverCmd(action, new SrvCallback() {
-                    @Override
-                    public void onSuccess(String result) {
-                        SSect ds = SSect.fromJson(result);
-                        if (ds == null)
-                            ds = new SSect();
-                        enterToRoom(ds);
-                    }
-                });
-            }
-            else if ("show-menu".equals(act)) {
-                showMenu(wholeMenuTree);
-            }
-            else if ("menu".equals(act)) {
-                action.add("sectID", "site-nav-menu-story");
-                serverCmd(action, new SrvCallback() {
-                    @Override
-                    public void onSuccess(String result) {
-                        SSect ds = SSect.fromJson(result);
-                        wholeMenuTree = ds;
-                        setButtonEnabled(R.id.sf_menu, true);
-                        wholeMenuTree.padd("session", sessionID);
-                        postRsvpService("menu", wholeMenuTree);
-                    }
-                });
-            }
-            else if ("hello".equals(act)) {
-                doAction(R.id.sf_hello);
-            }
-        }
-        void returnUp(final SSect ds, final int lp_delta) {
-            if (ds == null || ds.returnUp == null)
-                return;
-            justRead = 0;
-            final SSect up = ds.returnUp;
-            Action show = new Action("show").add("sectID", up.guid);
-            if (up.isValue) {
-                show.setAction("enter");
-                show.add("vname", up.entity.name);
-            }
-            serverCmd(show, new SrvCallback() {
-                @Override
-                public void onSuccess(String result) {
-                    SSect ds = SSect.fromJson(result);
-                    if (ds == null) {
-                        ds = up;
-                    } else {
-                        int lp = up.currListPosition + lp_delta;
-                        ds.returnUp = up.returnUp;
-                        if (lp < 0 || ds.children == null || lp >= ds.children.length) {
-                            ds.currListPosition = -1;
-                            if (lp_delta > 0 && ds.returnUp != null && "auto-next-up".equals(action.getAction())) {
-                                returnUp(ds, lp_delta);
-                                return;
-                            }
-                        } else {
-                            ds.currListPosition = lp;
-                            if (lp_delta != 0) {
-                                if (!ds.children[lp].nextAsSkip) {
-                                    SSect child = ds.children[lp];
-                                    Action action = new Action("enter").add("sectID", child.guid);
-                                    if (child.isValue)
-                                        action.add("vname", child.entity.name);
-                                    enterDown(ds, action);
-                                    return;
-                                }
-                            }
-                        }
-                    }
-                    returnToRoom(ds);
-                }
-            });
-        }
-        void enterDown(final SSect parent, final Action action) {
-            if (action.val("position") != null) {
-                parent.currListPosition = Integer.parseInt(action.val("position"));
-                action.del("position");
-            }
-            serverCmd(action, new SrvCallback() {
-                @Override
-                public void onSuccess(String result) {
-                    SSect ds = SSect.fromJson(result);
-                    if (ds == null)
-                        ds = new SSect();
-                    ds.returnUp = parent;
-                    enterToRoom(ds);
-                }
-            });
-        }
-    }
-
-    void postRsvpService(String action, SSect sect) {
-        if (mRsvpService == null)
-            return;
-        try {
-            if (sect != null)
-                mRsvpService.post(action, null, sect.fillJson(new JSONObject()).toString());
-        } catch (RemoteException e) {
-            Log.e(TAG, "Error sending a message to RsvpService", e);
         }
     }
 
@@ -714,34 +536,40 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
 
     protected void titleChildAt(int pos) {
         justRead = 0;
-        if (currentData != null) {
-            if (currentData.children == null || currentData.children.length == 0) {
-                currentData.currListPosition = -1;
+        final SSect ds = nav.currentData;
+        if (ds != null) {
+            if (ds.children == null || ds.children.length == 0) {
+                ds.currListPosition = -1;
                 rvChildren.setAdapter(null);
                 rvChildren.setVisibility(View.GONE);
             } else {
                 if (pos < 0)
                     pos = 0;
-                if (pos >= currentData.children.length)
-                    pos = currentData.children.length - 1;
-                currentData.currListPosition = pos;
-                rvChildren.setAdapter(new SSectAdapter(currentData));
+                if (pos >= ds.children.length)
+                    pos = ds.children.length - 1;
+                ds.currListPosition = pos;
+                rvChildren.setAdapter(new SSectAdapter(ds));
                 rvChildren.setVisibility(View.VISIBLE);
                 RsvpWords words = new RsvpWords()
-                        .addTitleWords(currentData.title)
+                        .addTitleWords(ds.title)
                         .addPause()
-                        .addValueWords(currentData);
+                        .addValueWords(ds);
                 play(words);
                 stopVoice();
-                playVoice(currentData.title);
-                playValueVoice(currentData);
+                playVoice(ds.title);
+                playValueVoice(ds);
             }
             justRead |= RsvpWords.JR_LIST;
         }
         fillCommands();
     }
 
-    protected void showWhereAmIData(SSect ds) {
+    @Override
+    public void showWhereAmIData(final SSect ds) {
+        if (ds == null) {
+            play(new RsvpWords().addWarning("Place is not known"));
+            return;
+        }
         RsvpWords words = new RsvpWords();
         words.addTitleWords(ds.title).addPause();
         stopVoice();
@@ -759,16 +587,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         play(words);
     }
 
-    protected void enterToRoom(SSect ds) {
-        if (ds == null) {
-            ds = new SSect();
-            ds.title = new SEntity();
-        }
-        if (ds.children != null && ds.children.length == 0)
-            ds.children = null;
-        ds.currListPosition = -1;
-        currentData = ds;
-
+    @Override
+    public void enterToRoom(final SSect ds) {
+        justRead = 0;
         if (!introWasShown(ds) && ds.descr == null)
             introSetShown(ds, true);
 
@@ -789,34 +610,29 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             words.addArticleWords(ds.entity);
             playVoice(ds.entity);
         }
-        else if (currentData.children != null && currentData.children.length > 0) {
-            rvChildren.setAdapter(new SSectAdapter(currentData));
+        else if (ds.children != null && ds.children.length > 0) {
+            rvChildren.setAdapter(new SSectAdapter(ds));
             rvChildren.setVisibility(View.VISIBLE);
         }
-        else if (!currentData.isValue) {
+        else if (!ds.isValue) {
             words.addIntroWords(ds.descr);
             playVoice(ds.descr);
         }
         words.addValueWords(ds);
         playValueVoice(ds);
         play(words);
-        postRsvpService("sect", ds);
         if (rvChildren.getVisibility() == View.VISIBLE)
             justRead |= RsvpWords.JR_LIST;
         fillCommands();
     }
 
-    protected void returnToRoom(SSect ds) {
+    @Override
+    public void returnToRoom(SSect ds) {
         justRead = 0;
-        if (ds == null) {
-            ds = new SSect();
-            ds.title = new SEntity();
-        }
-        currentData = ds;
         if (ds.currListPosition >= 0) {
             titleChildAt(ds.currListPosition);
         } else {
-            enterToRoom(ds);
+            nav.doEnterToRoom(ds);
         }
     }
 
@@ -833,7 +649,8 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         return null;
     }
 
-    protected void showMenu(final SSect action) {
+    @Override
+    public void showMenu(final SSect action) {
         if (action == null)
             return;
         if (action.children != null && action.children.length > 0) {
@@ -855,7 +672,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
                             dialog.dismiss();
-                            showMenu(findParentMenu(wholeMenuTree, action));
+                            showMenu(findParentMenu(nav.wholeMenuTree, action));
                         }
                     })
                     .setSingleChoiceItems(adapter, -1, new DialogInterface.OnClickListener() {
@@ -869,65 +686,9 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                     .show();
         }
         else if (action.entity.data != null) {
-            makeActionHandler(action.entity).run();
+            nav.makeActionHandler(action.entity).run();
         }
     }
-
-    interface SrvCallback {
-        void onSuccess(String result);
-    }
-    public void serverCmd(Action action, final SrvCallback callback) {
-        final  String reqData = action.serializeToCmd(sessionID, CAPS).toString();
-        executor.execute(new Runnable() {
-            @Override
-            public void run() {
-                InputStream is = null;
-
-                try {
-                    URL url = new URL(JSON_URL);
-                    HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                    conn.setReadTimeout(5000 /* milliseconds */);
-                    conn.setConnectTimeout(5000 /* milliseconds */);
-                    conn.setRequestMethod("POST");
-                    conn.setDoInput(true);
-                    OutputStream os = conn.getOutputStream();
-                    os.write(reqData.getBytes(utf8));
-                    os.close();
-                    // Starts the query
-                    conn.connect();
-                    int response = conn.getResponseCode();
-                    Log.d(TAG, "The response is: " + conn.getResponseMessage());
-                    if (response == 200) {
-                        StringBuilder sb = new StringBuilder();
-                        is = conn.getInputStream();
-                        InputStreamReader reader = new InputStreamReader(is, utf8);
-                        char[] buffer = new char[4096];
-                        int sz;
-                        while ((sz = reader.read(buffer)) > 0)
-                            sb.append(buffer, 0, sz);
-                        reader.close();
-                        final String result = sb.toString();
-                        handler.post(new Runnable() {
-                            @Override
-                            public void run() {
-                                callback.onSuccess(result);
-                            }
-                        });
-                    } else {
-                        setStatus("Error on server request");
-                    }
-                } catch (Throwable e) {
-                    Log.e(TAG, "Server connection error", e);
-                    setStatus("Error on server request");
-                } finally {
-                    if (is != null) {
-                        try { is.close(); } catch (IOException e) {}
-                    }
-                }
-            }
-        });
-    }
-
 
     class SSectAdapter extends RecyclerView.Adapter<SSectAdapter.ViewHolder> {
         private SSect mSect;
@@ -951,7 +712,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             public void onClick(View view) {
                 if (action != null) {
                     mSect.currListPosition = getAdapterPosition();
-                    new ActionHandler(action).run();
+                    nav.executeAction(action);
                 }
             }
         }
@@ -992,7 +753,7 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
                 else if (sect.hasArticle || sect.hasChildren || sect.children != null)
                     holder.action = new Action("enter").add("sectID", sect.guid).add("position", position);
                 if (sect.isValue) {
-                    holder.editor = new EdtValue(sect, MainActivity.this, MainActivity.this);
+                    holder.editor = new EdtValue(sect, nav, MainActivity.this);
                 }
             }
             holder.tvTitle.setText(title);

@@ -15,6 +15,14 @@ import java.nio.charset.Charset;
 
 public class IOUtils {
 
+    public static final String RSVP_ACTION_PATH  = "/rsvp/action";
+    public static final String RSVP_REPLAY_PATH  = "/rsvp/replay/";
+
+    public static final String CHAT_POST_PATH    = "/chat/post";
+
+    static final String UpStars_JSON_URL = "http://u-com.pro/UpStars/Service";
+    //static final String UpStars_JSON_URL = "http://192.168.2.157:8080/UpStars/Service";
+
     public final static Charset UTF8 = Charset.forName("UTF-8");
 
     private IOUtils() {}

@@ -1,10 +1,12 @@
 package com.skinterface.demo.android;
 
 import android.Manifest;
+import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.IntentFilter;
 import android.content.ServiceConnection;
 import android.graphics.Typeface;
 import android.os.Build;
@@ -20,6 +22,7 @@ import android.speech.tts.Voice;
 import android.support.annotation.RequiresApi;
 import android.support.v4.app.NotificationCompat;
 import android.support.v4.app.NotificationManagerCompat;
+import android.support.v4.content.LocalBroadcastManager;
 import android.support.v7.app.AlertDialog;
 import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.LinearLayoutManager;
@@ -40,6 +43,8 @@ import android.widget.ImageButton;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import com.google.android.gms.wearable.Node;
+
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
@@ -56,6 +61,7 @@ import java.net.URL;
 import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Locale;
@@ -117,6 +123,15 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     //Audio voice_control;
     //Label text_label;
 
+    private BroadcastReceiver broadcastReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            if (RsvpService.ACTION_CONNECTIONS_CHANGED.equals(intent.getAction())) {
+                supportInvalidateOptionsMenu();
+            }
+        }
+    };
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -137,11 +152,37 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
         btnForward = (ImageButton) findViewById(R.id.sf_next_auto);
         btnForward.setImageResource(R.drawable.ic_touch_app_black_48dp);
         btnForward.setOnClickListener(this);
+
+        IntentFilter intentFilter = new IntentFilter();
+        intentFilter.addAction(RsvpService.ACTION_CONNECTIONS_CHANGED);
+        LocalBroadcastManager.getInstance(this).registerReceiver(broadcastReceiver, intentFilter);
+    }
+
+    @Override
+    protected void onDestroy() {
+        LocalBroadcastManager.getInstance(this).unregisterReceiver(broadcastReceiver);
+        super.onDestroy();
     }
 
     @Override
     public boolean onCreateOptionsMenu(Menu menu) {
         getMenuInflater().inflate(R.menu.main, menu);
+        {
+            MenuItem item = menu.findItem(R.id.connections_watch);
+            item.getIcon().mutate();
+            if (RsvpService.choosenNode != null)
+                item.getIcon().setAlpha(255);
+            else
+                item.getIcon().setAlpha(64);
+        }
+        {
+            MenuItem item = menu.findItem(R.id.connections_chat);
+            item.getIcon().mutate();
+            if (RsvpService.mChatService != null)
+                item.getIcon().setAlpha(255);
+            else
+                item.getIcon().setAlpha(64);
+        }
         return true;
     }
 
@@ -158,6 +199,39 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
     }
 
     boolean doAction(int id) {
+        if (id == R.id.connections_watch) {
+            RsvpService.RsvpNode[] nodes = RsvpService.wearNodes;
+            RsvpService.RsvpNode n = RsvpService.choosenNode;
+            int index = n == null ? -1 : Arrays.asList(nodes).indexOf(n);
+            ArrayAdapter<RsvpService.RsvpNode> adapter = new ArrayAdapter<>(this,
+                    android.R.layout.select_dialog_singlechoice, nodes);
+            DialogInterface.OnClickListener listener = new DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(DialogInterface dialog, int which) {
+                    if (which >= 0) {
+                        RsvpService.choosenNode = RsvpService.wearNodes[which];
+                        RsvpService.choosenNodeId = RsvpService.choosenNode.getId();
+                    }
+                    else if (which == DialogInterface.BUTTON_NEGATIVE) {
+                        RsvpService.choosenNode = null;
+                        RsvpService.choosenNodeId = null;
+                    }
+                    dialog.dismiss();
+                    supportInvalidateOptionsMenu();
+                }
+            };
+            AlertDialog.Builder builder = new AlertDialog.Builder(this).setTitle("Watch connection");
+            if (nodes.length == 0)
+                builder.setMessage("No nearby nodes");
+            else
+                builder.setSingleChoiceItems(adapter, index, listener);
+            if (index >= 0)
+                builder.setNegativeButton("Disconnect", listener);
+            else
+                builder.setNegativeButton("Close", listener);
+            builder.show();
+            return true;
+        }
         if (id == R.id.rsvp_notify) {
             int notificationId = 1;
             // Build intent for notification content
@@ -183,20 +257,13 @@ public class MainActivity extends AppCompatActivity implements View.OnClickListe
             notificationManager.notify(notificationId, notificationBuilder.build());
             return true;
         }
-        if (id == R.id.chat_connect) {
+        if (id == R.id.connections_chat) {
             if (mRsvpService != null) {
                 try {
-                    mRsvpService.post("chat-connect", null, null);
-                } catch (RemoteException e) {
-                    Log.e(TAG, "Error sending a message to RsvpService", e);
-                }
-            }
-            return true;
-        }
-        if (id == R.id.chat_disconnect) {
-            if (mRsvpService != null) {
-                try {
-                    mRsvpService.post("chat-disconnect", null, null);
+                    if (RsvpService.mChatService != null)
+                        mRsvpService.post("chat-disconnect", null, null);
+                    else
+                        mRsvpService.post("chat-connect", null, null);
                 } catch (RemoteException e) {
                     Log.e(TAG, "Error sending a message to RsvpService", e);
                 }

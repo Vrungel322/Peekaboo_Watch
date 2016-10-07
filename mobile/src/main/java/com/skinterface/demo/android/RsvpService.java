@@ -1,5 +1,6 @@
 package com.skinterface.demo.android;
 
+import android.annotation.SuppressLint;
 import android.app.Service;
 import android.content.ComponentName;
 import android.content.Context;
@@ -7,9 +8,10 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.net.Uri;
 import android.os.Bundle;
-import android.os.Environment;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.support.annotation.NonNull;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
 import com.google.android.gms.common.ConnectionResult;
@@ -30,15 +32,11 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.nio.charset.Charset;
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -50,13 +48,40 @@ public class RsvpService extends Service implements
 
     public static final String TAG = "RsvpService";
 
+    public static final String ACTION_CONNECTIONS_CHANGED = "action.connections_changed";
+
     public static final String RSVP_CAPABILITY = "rsvp_demo";
     public static final String RSVP_MESSAGE_PATH = "/rsvp_demo";
 
-    final static Charset utf8 = Charset.forName("UTF-8");
+    public static class RsvpNode implements Node {
+        public static RsvpNode[] emptyArray = new RsvpNode[0];
+        private final Node node;
+        public RsvpNode(Node node) {
+            this.node = node;
+        }
+        @Override
+        public String getId() {
+            return node.getId();
+        }
+        @Override
+        public String getDisplayName() {
+            return node.getDisplayName();
+        }
+        @Override
+        public boolean isNearby() {
+            return node.isNearby();
+        }
+        @Override
+        public String toString() {
+            return getDisplayName();
+        }
+    }
+
+    public static RsvpNode[] wearNodes = RsvpNode.emptyArray;
+    public static RsvpNode choosenNode;
+    public static String choosenNodeId;
 
     GoogleApiClient mGoogleApiClient;
-    Set<Node> wearNodes = Collections.emptySet();
 
     private ChatListener mChatListener = new ChatListener.Stub() {
         @Override
@@ -71,7 +96,7 @@ public class RsvpService extends Service implements
         }
     };
 
-    private ChatRequest mChatService;
+    public static ChatRequest mChatService;
     private ServiceConnection mChatConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder service) {
             mChatService = ChatRequest.Stub.asInterface(service);
@@ -79,6 +104,8 @@ public class RsvpService extends Service implements
             try {
                 mChatService.listen(mChatListener);
                 Log.i(TAG, "Chat service listener set");
+                Intent intent = new Intent(ACTION_CONNECTIONS_CHANGED);
+                LocalBroadcastManager.getInstance(RsvpService.this).sendBroadcast(intent);
             } catch (RemoteException e) {
                 Log.e(TAG, "Cannot setup chat listener", e);
             }
@@ -86,6 +113,8 @@ public class RsvpService extends Service implements
         public void onServiceDisconnected(ComponentName className) {
             Log.i(TAG, "Chat service disconnected");
             mChatService = null;
+            Intent intent = new Intent(ACTION_CONNECTIONS_CHANGED);
+            LocalBroadcastManager.getInstance(RsvpService.this).sendBroadcast(intent);
         }
     };
 
@@ -102,33 +131,11 @@ public class RsvpService extends Service implements
                 return "true";
             }
             else if ("chat-connect".equals(action)) {
-                if (mChatService == null) {
-                    Intent bi = new Intent();
-                    bi.setAction(Intent.ACTION_MAIN);
-                    bi.setComponent(new ComponentName(
-                            "com.peekaboo", "com.peekaboo.presentation.services.WearLink"));
-                    try {
-                        bindService(bi, mChatConnection, Context.BIND_AUTO_CREATE);
-                    } catch (Exception e) {
-                        Log.e(TAG, "Cannot bind chat service", e);
-                    }
-                }
+                chatConnect();
                 return "true";
             }
             else if ("chat-disconnect".equals(action)) {
-                if (mChatService != null) {
-                    try {
-                        mChatService.listen(null);
-                    } catch (RemoteException e) {
-                        Log.e(TAG, "Cannot disconnect chat listener", e);
-                    }
-                    try {
-                        unbindService(mChatConnection);
-                    } catch (Exception e) {
-                        Log.e(TAG, "Cannot unbind chat service", e);
-                    }
-                    mChatService = null;
-                }
+                chatDisconnect();
                 return "true";
             }
             return "false";
@@ -170,6 +177,43 @@ public class RsvpService extends Service implements
     }
 
     @Override
+    public void onDestroy() {
+        super.onDestroy();
+    }
+
+    private void chatConnect() {
+        if (mChatService == null) {
+            Intent bi = new Intent();
+            bi.setAction(Intent.ACTION_MAIN);
+            bi.setComponent(new ComponentName(
+                    "com.peekaboo", "com.peekaboo.presentation.services.WearLink"));
+            try {
+                bindService(bi, mChatConnection, Context.BIND_AUTO_CREATE);
+            } catch (Exception e) {
+                Log.e(TAG, "Cannot bind chat service", e);
+            }
+        }
+    }
+
+    private void chatDisconnect() {
+        if (mChatService != null) {
+            try {
+                mChatService.listen(null);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Cannot disconnect chat listener", e);
+            }
+            try {
+                unbindService(mChatConnection);
+            } catch (Exception e) {
+                Log.e(TAG, "Cannot unbind chat service", e);
+            }
+            mChatService = null;
+            Intent intent = new Intent(ACTION_CONNECTIONS_CHANGED);
+            LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
+        }
+    }
+
+    @Override
     public void onConnected(Bundle connectionHint) {
         Log.d(TAG, "onConnected: " + connectionHint);
         // Now you can use the Data Layer API
@@ -180,7 +224,7 @@ public class RsvpService extends Service implements
         Log.d(TAG, "onConnectionSuspended: " + cause);
     }
     @Override
-    public void onConnectionFailed(ConnectionResult result) {
+    public void onConnectionFailed(@NonNull ConnectionResult result) {
         Log.d(TAG, "onConnectionFailed: " + result);
     }
 
@@ -189,7 +233,7 @@ public class RsvpService extends Service implements
                 CapabilityApi.FILTER_REACHABLE).setResultCallback(
                 new ResultCallback<CapabilityApi.GetCapabilityResult>() {
                     @Override
-                    public void onResult(CapabilityApi.GetCapabilityResult result) {
+                    public void onResult(@NonNull CapabilityApi.GetCapabilityResult result) {
                         if (result.getStatus().isSuccess())
                             updateRsvpNodes(result.getCapability());
                     }
@@ -202,7 +246,35 @@ public class RsvpService extends Service implements
         updateRsvpNodes(capabilityInfo);
     }
     void updateRsvpNodes(CapabilityInfo capabilityInfo) {
-        wearNodes = capabilityInfo.getNodes();
+        Set<Node> nodes = capabilityInfo.getNodes();
+        if (nodes == null || nodes.isEmpty()) {
+            wearNodes = RsvpNode.emptyArray;
+        } else {
+            ArrayList<RsvpNode> arr = new ArrayList<>(nodes.size());
+            for (Node n : nodes)
+                arr.add(new RsvpNode(n));
+            wearNodes = arr.toArray(RsvpNode.emptyArray);
+        }
+        String nodeId = choosenNodeId;
+        RsvpNode node = null;
+        if (nodeId == null) {
+            for (RsvpNode n : wearNodes) {
+                if (n.isNearby()) {
+                    node = n;
+                    break;
+                }
+            }
+        } else {
+            for (RsvpNode n : wearNodes) {
+                if (n.isNearby() && nodeId.equals(n.getId())) {
+                    node = n;
+                    break;
+                }
+            }
+        }
+        choosenNode = node;
+        Intent intent = new Intent(ACTION_CONNECTIONS_CHANGED);
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
     }
     String pickBestNodeId() {
         String bestNodeId = null;
@@ -225,7 +297,7 @@ public class RsvpService extends Service implements
             if (sect != null)
                 sect.fillJson(json);
         } catch (JSONException e) {}
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, json.toString().getBytes(utf8));
+        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, json.toString().getBytes(IOUtils.UTF8));
     }
 
     final void requestChat(JSONObject message) {
@@ -235,9 +307,10 @@ public class RsvpService extends Service implements
         try {
             message.put("action", "chat");
         } catch (JSONException e) {}
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, message.toString().getBytes(utf8));
+        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, RSVP_MESSAGE_PATH, message.toString().getBytes(IOUtils.UTF8));
     }
 
+    @SuppressLint("SetWorldReadable")
     @Override
     public void onMessageReceived(MessageEvent msg) {
         Log.i(TAG, "received message from node: "+msg.getSourceNodeId()+", path: "+msg.getPath());
@@ -255,11 +328,11 @@ public class RsvpService extends Service implements
                         params.put("audio", path);
                         for (String p : uri.getQueryParameterNames())
                             params.put(p, uri.getQueryParameter(p));
-                        String res = mChatService.post("post", params, new String(msg.getData(), utf8));
+                        String res = mChatService.post("post", params, new String(msg.getData(), IOUtils.UTF8));
                         if (res != null) {
                             JSONObject jres = new JSONObject(res);
                             jres.put("action", "chat");
-                            Wearable.MessageApi.sendMessage(mGoogleApiClient, msg.getSourceNodeId(), RSVP_MESSAGE_PATH, jres.toString().getBytes(utf8));
+                            Wearable.MessageApi.sendMessage(mGoogleApiClient, msg.getSourceNodeId(), RSVP_MESSAGE_PATH, jres.toString().getBytes(IOUtils.UTF8));
                         }
                     } catch (Exception e) {
                         Log.e(TAG, "Error sending voice", e);
@@ -274,16 +347,15 @@ public class RsvpService extends Service implements
                 MainActivity.executor.execute(new Runnable() {
                     @Override
                     public void run() {
-                        InputStream is = null;
                         try {
                             URL url = new URL(MainActivity.JSON_URL);
                             HttpURLConnection conn = (HttpURLConnection) url.openConnection();
-                            conn.setReadTimeout(5000 /* milliseconds */);
-                            conn.setConnectTimeout(5000 /* milliseconds */);
+                            conn.setReadTimeout(5000);
+                            conn.setConnectTimeout(5000);
                             conn.setRequestMethod("POST");
                             conn.setDoInput(true);
                             OutputStream os = conn.getOutputStream();
-                            os.write(reqData.getBytes(utf8));
+                            os.write(reqData.getBytes(IOUtils.UTF8));
                             os.close();
                             conn.connect();
                             JSONObject jobj = IOUtils.parseHTTPResponce(conn);
@@ -293,8 +365,6 @@ public class RsvpService extends Service implements
                             }
                         } catch (Throwable e) {
                             Log.e(TAG, "Server connection error", e);
-                        } finally {
-                            IOUtils.safeClose(is);
                         }
                     }
                 });
@@ -309,7 +379,6 @@ public class RsvpService extends Service implements
         if (path.startsWith("/voice/")) {
             File file = new File(getCacheDir(), path.substring(7));
             channel.receiveFile(mGoogleApiClient, Uri.fromFile(file), false);
-            return;
         }
     }
 

@@ -1,48 +1,67 @@
 package com.skinterface.demo.android;
 
+import org.json.JSONArray;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
-import java.util.concurrent.ConcurrentSkipListMap;
 
 public class ChatSectionsModel extends SectionsModel {
 
-    static final SSect chatMenu;
-    private static final HashMap<String,ChatSectionsModel> chatRooms = new HashMap<>();
-    static {
-        chatMenu = SSect.makeMenu("Peekaboo");
-        chatMenu.children = new SSect[] {
-                SSect.makeAction("User 1", "chat").padd("room", "userone"),
-                SSect.makeAction("User 2", "chat").padd("room", "usertwo"),
-                SSect.makeAction("User 3", "chat").padd("room", "userthree"),
-        };
+    private static final ChatSectionsModel model = new ChatSectionsModel();
+
+    public static ChatSectionsModel get() { return model; }
+
+
+
+    private String userID;
+    private String userName;
+
+    private HashMap<String, SSect> chatRooms = new HashMap<>();
+    private SSect chat_room;
+
+
+    public void setAttachInfo(JSONObject jobj) {
+        try {
+            userID = jobj.getString("id");
+            userName = jobj.getString("name");
+            ArrayList<SSect> children = new ArrayList<>();
+            JSONArray jarr = jobj.getJSONArray("contacts");
+            for (int i=0; i < jarr.length(); ++i) {
+                JSONObject jc = jarr.getJSONObject(i);
+                String id = jc.getString("id");
+                String name = jc.getString("name");
+                makeChatRoom(id, name);
+            }
+        } catch (Exception e) {
+        }
     }
 
-    private final SSect chat_room;
-
-    public static synchronized ChatSectionsModel getChatModel(String room) {
-        ChatSectionsModel model = chatRooms.get(room);
-        if (model != null)
-            return model;
-        room = room.intern();
-        SSect chat = new SSect();
+    private void makeChatRoom(String partenrId, String userName) {
+        SSect chat = chatRooms.get(partenrId);
+        if (chat != null)
+            return;
+        partenrId = partenrId.intern();
+        chat = new SSect();
         chat.entity.media = "chat-room";
-        chat.entity.name = room;
+        chat.entity.name = partenrId;
         chat.entity.data = "chat";
         chat.title = new SEntity();
         chat.title.media = "text";
-        chat.title.data = room;
+        chat.title.data = userName;
         chat.hasChildren = true;
         chat.children = new SSect[0];
-        model = new ChatSectionsModel(chat);
-        chatRooms.put(room, model);
-        return model;
+        chatRooms.put(partenrId, chat);
     }
 
-    private ChatSectionsModel(SSect chat_room) {
-        this.chat_room = chat_room;
+    private ChatSectionsModel() {
+    }
+
+    public void setChatRoom(String partnerId) {
+        chat_room = chatRooms.get(partnerId);
+        notifyDataChanged();
     }
 
     public SSect currArticle() {
@@ -50,16 +69,46 @@ public class ChatSectionsModel extends SectionsModel {
     }
 
     public int size() {
+        if (chat_room == null)
+            return 0;
         return chat_room.children.length;
     }
 
     public SSect get(int i) {
+        if (chat_room == null || chat_room.children == null || i >= chat_room.children.length)
+            return null;
         return chat_room.children[i];
     }
 
+    public void addChatMessage(String text) {
+        SSect msg = new SSect();
+        msg.entity.media = "chat-text-msg";
+        msg.entity.role = "sent";
+        msg.entity.name = "unconfirmed";
+        msg.title = new SEntity();
+        msg.title.media = "text";
+        msg.title.data = text;
+        msg.chatTimestamp = System.currentTimeMillis();
+        msg.padd("sender", userID);
+        msg.padd("receiver", chat_room.entity.name);
+        int len = chat_room.children.length;
+        SSect[] arr = Arrays.copyOf(chat_room.children, len+1);
+        arr[len] = msg;
+        chat_room.children = arr;
+        notifyDataChanged();
+    }
+
     public void mergeChatMessage(JSONObject jmsg) {
-        long id = jmsg.optLong("id");
+
         boolean own = jmsg.optBoolean("own");
+        String partner = own ? jmsg.optString("receiver") : jmsg.optString("sender");;
+        if (partner == null || partner.isEmpty())
+            return;
+        SSect chat = chatRooms.get(partner);
+        if (chat == null)
+            return;
+
+        long id = jmsg.optLong("id");
         long timestamp = jmsg.optLong("timestamp");
         String receiver = jmsg.optString("receiver");
         String sender = jmsg.optString("sender");
@@ -67,15 +116,15 @@ public class ChatSectionsModel extends SectionsModel {
         String text = jmsg.optString("text");
         // find this message in the chat
         SSect msg = null;
-        if (chat_room.children != null) {
-            for (SSect old : chat_room.children) {
+        if (chat.children != null) {
+            for (SSect old : chat.children) {
                 if (old.chatId == id) {
                     msg = old;
                     break;
                 }
             }
         } else {
-            chat_room.children = new SSect[0];
+            chat.children = new SSect[0];
         }
         if (msg == null) {
             msg = new SSect();
@@ -89,8 +138,8 @@ public class ChatSectionsModel extends SectionsModel {
             msg.chatTimestamp = timestamp;
             msg.padd("sender", sender);
             msg.padd("receiver", receiver);
-            int len = chat_room.children.length;
-            SSect[] arr = Arrays.copyOf(chat_room.children, len+1);
+            int len = chat.children.length;
+            SSect[] arr = Arrays.copyOf(chat.children, len+1);
             arr[len] = msg;
             Arrays.sort(arr, new Comparator<SSect>() {
                 @Override
@@ -100,7 +149,7 @@ public class ChatSectionsModel extends SectionsModel {
                     return Long.compare(msg1.chatId, msg2.chatId);
                 }
             });
-            chat_room.children = arr;
+            chat.children = arr;
         } else {
             msg.entity.name = status;
             if (text != null && !text.isEmpty())

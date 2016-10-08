@@ -130,6 +130,10 @@ public class MainActivity extends AppCompatActivity implements
         LocalBroadcastManager.getInstance(this).registerReceiver(broadcastReceiver, intentFilter);
     }
 
+    public void attachToSite(SSect menu) {
+        nav.executeAction(new Action("home"));
+    }
+
     @Override
     protected void onDestroy() {
         LocalBroadcastManager.getInstance(this).unregisterReceiver(broadcastReceiver);
@@ -290,7 +294,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
-    public ActionHandler makeActionHandler(Action action) {
+    public ActionHandler makeActionHandler(SiteNavigator nav, Action action) {
         return new ActionHandler(nav, this, action);
     }
 
@@ -404,7 +408,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
-    public void serverCmd(Action action, final SiteNavigator.SrvCallback callback) {
+    public void siteServerCmd(Action action, SiteNavigator nav, final SrvCallback callback) {
         final  String reqData = action.serializeToCmd(nav.sessionID, CAPS).toString();
         executor.execute(new Runnable() {
             @Override

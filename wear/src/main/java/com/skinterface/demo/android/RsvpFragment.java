@@ -1,8 +1,10 @@
 package com.skinterface.demo.android;
 
 import android.app.Fragment;
+import android.graphics.Rect;
 import android.graphics.Typeface;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.style.StyleSpan;
@@ -18,13 +20,32 @@ import static com.skinterface.demo.android.WearActivity.TAG;
 
 public class RsvpFragment extends Fragment implements
         View.OnClickListener,
-        GestureDetector.OnGestureListener
-{
+        GestureDetector.OnGestureListener, View.OnLongClickListener {
     private static final int STATE_INIT    = 0;
     private static final int STATE_DONE    = 1;
     private static final int STATE_TITLE   = 2;
     private static final int STATE_ARTICLE = 3;
     private static final int STATE_CHILD   = 4;
+
+    private static final int[] TICS = {
+            50, //calcTic(200),
+            45, //calcTic(220),
+            40, //calcTic(250),
+            35, //calcTic(280),
+            30, //calcTic(330),
+            26, //calcTic(380),
+            23, //calcTic(430),
+            20, //calcTic(430),
+            18, //calcTic(550),
+            17, //calcTic(590),
+            16, //calcTic(620),
+            15, //calcTic(670),
+            14, //calcTic(710),
+    };
+    private static int calcTic(int wpm) {
+        int word_millis = 60*1000 / wpm;
+        return word_millis / RsvpWords.DEFAULT_WEIGHT;
+    }
 
     RsvpView mRsvpView;
     TextView mPositionView;
@@ -38,6 +59,8 @@ public class RsvpFragment extends Fragment implements
         View view = inflater.inflate(R.layout.fr_rsvp_round, container, false);
         view.findViewById(R.id.next).setOnClickListener(this);
         view.findViewById(R.id.prev).setOnClickListener(this);
+        view.findViewById(R.id.record).setOnClickListener(this);
+        view.findViewById(R.id.record).setOnLongClickListener(this);
         mRsvpView = (RsvpView) view.findViewById(R.id.rsvp);
         mRsvpView.setListener(((WearActivity)getActivity()).handler);
         mPositionView = (TextView) view.findViewById(R.id.position);
@@ -81,7 +104,7 @@ public class RsvpFragment extends Fragment implements
         if (mRsvpView == null)
             return;
         if (sect == null) {
-            mPositionView.setText("");
+            mPositionView.setText(getSpeedString());
             return;
         }
         SpannableStringBuilder sb = new SpannableStringBuilder();
@@ -122,13 +145,21 @@ public class RsvpFragment extends Fragment implements
         mPositionView.setText(sb);
     }
 
+    private String getSpeedString() {
+        int tic = mRsvpView.getTic();
+        int word_millis = tic * RsvpWords.DEFAULT_WEIGHT;
+        int words_per_minute = 60*1000 / word_millis;
+        words_per_minute = (words_per_minute + 4) / 10;
+        return (words_per_minute*10) + " wpm";
+    }
+
     private void onNext() {
         if (mRsvpView == null)
             return;
         if (sect == null) {
             state = STATE_DONE;
             mRsvpView.stop(null);
-            mPositionView.setText("");
+            mPositionView.setText(getSpeedString());
             return;
         }
         if (state == STATE_INIT || state == STATE_DONE) {
@@ -228,12 +259,23 @@ public class RsvpFragment extends Fragment implements
 
     @Override
     public void onClick(View v) {
-        if (v.getId() == R.id.next) {
+        if (v.getId() == R.id.record) {
+            ((WearActivity) getActivity()).startVoiceRecognition();
+        }
+        else if (v.getId() == R.id.next) {
             onNext();
         }
         else if (v.getId() == R.id.prev) {
             onPrev();
         }
+    }
+
+    @Override
+    public boolean onLongClick(View v) {
+        if (v.getId() == R.id.record) {
+            ((WearActivity) getActivity()).startVoiceRecording();
+        }
+        return false;
     }
 
     @Override
@@ -255,14 +297,46 @@ public class RsvpFragment extends Fragment implements
     @Override
     public void onLongPress(MotionEvent event) {
         Log.d(TAG, "onLongPress: " + event.toString());
-        int x = (int)event.getX();
-        int y = (int)event.getY();
-        int Cx = (mRsvpView.getLeft() + mRsvpView.getRight()) / 2;
-        int Cy = (mRsvpView.getTop() + mRsvpView.getBottom()) / 2;
-        int dx2 = (Cx -x)*(Cx - x);
-        int dy2 = (Cy -y)*(Cy - y);
-        if (dx2 < 50*50 && dy2 < 50*50)
-            ((WearActivity)getActivity()).startRecordVoice();
+//        int x = (int)event.getX();
+//        int y = (int)event.getY();
+//        int Cx = (mRsvpView.getLeft() + mRsvpView.getRight()) / 2;
+//        Rect r = new Rect(Cx - 50, mRsvpView.getTop(), Cx + 50, mRsvpView.getBottom());
+//        if (r.contains(x, y)) {
+//            ((WearActivity) getActivity()).startRecordVoice();
+//            return;
+//        }
+//        r.set(mRsvpView.getRight()-100, r.top, mRsvpView.getRight(), r.bottom);
+//        if (r.contains(x, y)) {
+//            int tic = mRsvpView.getTic();
+//            int idx = 0;
+//            for (; idx < TICS.length-1; ++idx) {
+//                if (tic >= TICS[idx])
+//                    break;
+//            }
+//            if (idx+1 < TICS.length) {
+//                mRsvpView.setTic(TICS[idx + 1]);
+//                PreferenceManager.getDefaultSharedPreferences(getActivity().getApplicationContext())
+//                        .edit().putInt("rsvp_tic", mRsvpView.getTic()).apply();
+//            }
+//            mPositionView.setText(getSpeedString());
+//            return;
+//        }
+//        r.set(mRsvpView.getLeft(), r.top, mRsvpView.getLeft()+100, r.bottom);
+//        if (r.contains(x, y)) {
+//            int tic = mRsvpView.getTic();
+//            int idx = 0;
+//            for (; idx < TICS.length-1; ++idx) {
+//                if (tic >= TICS[idx])
+//                    break;
+//            }
+//            if (idx > 0) {
+//                mRsvpView.setTic(TICS[idx - 1]);
+//                PreferenceManager.getDefaultSharedPreferences(getActivity().getApplicationContext())
+//                        .edit().putInt("rsvp_tic", mRsvpView.getTic()).apply();
+//            }
+//            mPositionView.setText(getSpeedString());
+//            return;
+//        }
     }
 
     @Override
@@ -281,4 +355,5 @@ public class RsvpFragment extends Fragment implements
         Log.d(TAG, "onSingleTapUp: " + event.toString());
         return true;
     }
+
 }

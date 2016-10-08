@@ -18,6 +18,8 @@ public class IOUtils {
     public static final String RSVP_ACTION_PATH  = "/rsvp/action";
     public static final String RSVP_REPLAY_PATH  = "/rsvp/replay/";
 
+    public static final String CHAT_ACTION_PATH  = "/chat/action";
+    public static final String CHAT_REPLAY_PATH  = "/chat/replay/";
     public static final String CHAT_POST_PATH    = "/chat/post";
 
     static final String UpStars_JSON_URL = "http://u-com.pro/UpStars/Service";

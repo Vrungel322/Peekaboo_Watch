@@ -17,7 +17,7 @@ import android.widget.TextView;
 
 import org.json.JSONObject;
 
-public class WearMenuActivity extends WearableActivity implements WearableListView.ClickListener {
+public class MenuActivity extends WearableActivity implements WearableListView.ClickListener {
 
     public static final String RESULT_EXTRA = "item";
 
@@ -27,7 +27,7 @@ public class WearMenuActivity extends WearableActivity implements WearableListVi
     Adapter adapter;
 
     public static void startForResult(int requestCode, Activity context, SSect menu) {
-        Intent intent = new Intent(context, WearMenuActivity.class);
+        Intent intent = new Intent(context, MenuActivity.class);
         if (menu != null)
             intent.putExtra("menu", menu.fillJson(new JSONObject()).toString());
         context.startActivityForResult(intent, requestCode);

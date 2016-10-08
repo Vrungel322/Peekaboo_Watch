@@ -95,6 +95,7 @@ public class RsvpService extends Service implements
         }
     };
 
+    private static String mChatAttachInfo;
     public static ChatRequest mChatService;
     private ServiceConnection mChatConnection = new ServiceConnection() {
         public void onServiceConnected(ComponentName className, IBinder service) {
@@ -102,6 +103,7 @@ public class RsvpService extends Service implements
             Log.i(TAG, "Chat service connected");
             try {
                 mChatService.listen(mChatListener);
+                mChatAttachInfo = mChatService.post("attach", null, null);
                 Log.i(TAG, "Chat service listener set");
                 Intent intent = new Intent(ACTION_CONNECTIONS_CHANGED);
                 LocalBroadcastManager.getInstance(RsvpService.this).sendBroadcast(intent);
@@ -112,6 +114,7 @@ public class RsvpService extends Service implements
         public void onServiceDisconnected(ComponentName className) {
             Log.i(TAG, "Chat service disconnected");
             mChatService = null;
+            mChatAttachInfo = null;
             Intent intent = new Intent(ACTION_CONNECTIONS_CHANGED);
             LocalBroadcastManager.getInstance(RsvpService.this).sendBroadcast(intent);
         }
@@ -180,6 +183,7 @@ public class RsvpService extends Service implements
                 Log.e(TAG, "Cannot unbind chat service", e);
             }
             mChatService = null;
+            mChatAttachInfo = null;
             Intent intent = new Intent(ACTION_CONNECTIONS_CHANGED);
             LocalBroadcastManager.getInstance(this).sendBroadcast(intent);
         }
@@ -266,7 +270,7 @@ public class RsvpService extends Service implements
         try {
             message.put("action", "chat");
         } catch (JSONException e) {}
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, message.toString().getBytes(IOUtils.UTF8));
+        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, IOUtils.CHAT_ACTION_PATH, message.toString().getBytes(IOUtils.UTF8));
     }
 
     @SuppressLint("SetWorldReadable")
@@ -274,6 +278,20 @@ public class RsvpService extends Service implements
     public void onMessageReceived(final MessageEvent msg) {
         Log.i(TAG, "received message from node: "+msg.getSourceNodeId()+", path: "+msg.getPath());
         Uri uri = Uri.parse(msg.getPath());
+        if (msg.getPath().startsWith(IOUtils.CHAT_ACTION_PATH)) {
+            byte[] responce = null;
+            if (mChatService != null && mChatAttachInfo != null) {
+                try {
+                    JSONObject jres = new JSONObject(mChatAttachInfo);
+                    jres.put("action", "attach");
+                    responce = jres.toString().getBytes(IOUtils.UTF8);
+                } catch (Exception e) {
+                    Log.e(TAG, "Error sending voice", e);
+                }
+            }
+            Wearable.MessageApi.sendMessage(mGoogleApiClient, msg.getSourceNodeId(), IOUtils.CHAT_REPLAY_PATH+msg.getRequestId(), responce);
+            return;
+        }
         if (msg.getPath().startsWith(IOUtils.CHAT_POST_PATH)) {
             if (mChatService != null) {
                 try {

@@ -7,6 +7,7 @@ import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.Handler;
 import android.os.SystemClock;
+import android.preference.PreferenceManager;
 import android.util.AttributeSet;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
@@ -19,13 +20,13 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
         final RsvpWords words;
         final int length;
         int wordsPosition;
-        int tic;
+        int tic; // 1000 /60
         long till_time;
-        RsvpState(RsvpWords words) {
+        RsvpState(RsvpWords words, int tic) {
             this.words = words;
             this.length = words.size();
             this.wordsPosition = -1;
-            this.tic = 25;
+            this.tic = tic;
             this.till_time = SystemClock.uptimeMillis() + 4*tic;
         }
     }
@@ -36,19 +37,20 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
     private Handler          listener;
     private Drawable         icon_mic;
     private Canvas           canvas;
+    private int              initial_tic;
     private RsvpState        rsvpState;
 
-    static final int BLACK = 0xFF222222;
-    static final int GRAY = 0xFFAAAAAA;
-    static final int RED = 0xFFFF5555;
+    static final int BLACK = 0xFF0F0F0F;
+    static final int GRAY = 0xFF4B4b4b;
+    static final int RED = 0xFFCC3333;
     static final int WHITE = 0xFFEEEEEE;
     int CANVAS_W = 480;
-    int CANVAS_H = 160;
+    int CANVAS_H = 116;
     int PIVOT_X = 180;
-    int PIVOT_H = 24;
-    int LINE_HW = 6;
-    int TEXT_SZ = 56;
-    int TEXT_Y = 100;
+    int PIVOT_H = 14;
+    int LINE_HW = 4;
+    int TEXT_SZ = 48;
+    int TEXT_Y = 76;
 
     public RsvpView(Context context) {
         super(context);
@@ -66,8 +68,10 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
     }
 
     private void init() {
+        initial_tic = PreferenceManager.getDefaultSharedPreferences(getContext().getApplicationContext())
+                .getInt("rsvp_tic", 35);
         getHolder().addCallback(this);
-        icon_mic = getContext().getResources().getDrawable(R.drawable.ic_mic_white_48dp);
+        icon_mic = null;//getContext().getResources().getDrawable(R.drawable.ic_mic_white_48dp);
         if (icon_mic != null) {
             icon_mic.mutate();
             icon_mic.setAlpha(64);
@@ -96,7 +100,7 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
 
     void play(final RsvpWords words) {
         try { setKeepScreenOn(true); } catch (Exception e) {}
-        rsvpState = new RsvpState(words);
+        rsvpState = new RsvpState(words, initial_tic);
         thread.requestStateTransit(RsvpThread.STATE_RSVP);
     }
 
@@ -111,6 +115,21 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
             thread.requestStateTransit(RsvpThread.STATE_STOP);
             if (rsvpState == null)
                 try { setKeepScreenOn(false); } catch (Exception e) {}
+        }
+    }
+
+    int getTic() {
+        return initial_tic;
+    }
+
+    void setTic(int tic) {
+        if (tic <  13) tic = 13;
+        if (tic > 100) tic = 100;
+        if (tic != initial_tic) {
+            initial_tic = tic;
+            RsvpState s = rsvpState;
+            if (s != null)
+                s.tic = tic;
         }
     }
 

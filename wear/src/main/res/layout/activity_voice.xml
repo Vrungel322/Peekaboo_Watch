@@ -5,7 +5,6 @@
     android:id="@+id/voice_dialog"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/card_default_background"
     >
 
     <TextView
@@ -15,6 +14,8 @@
         android:layout_gravity="center_horizontal|top"
         android:layout_marginTop="32dp"
         app:layout_box="all"
+        android:gravity="center"
+        android:textSize="24sp"
         android:typeface="monospace"
         android:text="15:25" />
 
@@ -32,6 +33,7 @@
         android:id="@android:id/button2"
         android:layout_width="56dp"
         android:layout_height="56dp"
+        android:layout_marginTop="8dp"
         android:layout_gravity="center"
         app:layout_box="all"
         app:imageScaleMode="center"

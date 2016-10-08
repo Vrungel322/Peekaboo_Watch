@@ -11,7 +11,7 @@ import java.util.Locale;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
-public class SiteNavigator implements Action.ActionExecutor {
+public class SiteNavigator implements Navigator, Action.ActionExecutor {
 
     public static final String TAG = "SkinterPhone";
 
@@ -27,7 +27,6 @@ public class SiteNavigator implements Action.ActionExecutor {
         };
     }
 
-
     public final SrvClient client;
 
     String sessionID;
@@ -37,16 +36,14 @@ public class SiteNavigator implements Action.ActionExecutor {
     // Current data
     SSect currentData;
 
-    public interface SrvCallback {
-        void onSuccess(String result);
-    }
     public interface SrvClient {
-        ActionHandler makeActionHandler(Action action);
+        ActionHandler makeActionHandler(SiteNavigator nav, Action action);
+        void attachToSite(SSect menu);
         void enterToRoom(SSect sect);
         void returnToRoom(SSect sect);
         void showWhereAmIData(SSect sect);
         void showMenu(SSect menu);
-        void serverCmd(Action action, SiteNavigator.SrvCallback callback);
+        void siteServerCmd(Action action, SiteNavigator nav, SrvCallback callback);
     }
     public static abstract class ActionHandler implements Runnable {
         public final SiteNavigator nav;
@@ -66,7 +63,7 @@ public class SiteNavigator implements Action.ActionExecutor {
 
     @Override
     public final void executeAction(Action action) {
-        client.makeActionHandler(action).run();
+        client.makeActionHandler(this, action).run();
     }
 
     public final ActionHandler makeActionHandler(SEntity entity) {
@@ -75,19 +72,19 @@ public class SiteNavigator implements Action.ActionExecutor {
             for (String key : entity.props.keySet())
                 action.add(key, entity.props.get(key));
         }
-        return client.makeActionHandler(action);
+        return client.makeActionHandler(this, action);
     }
 
     public void doHello() {
         String lang = Locale.getDefault().getLanguage();
         Action hello = Action.create("hello");
         hello.add("lang", lang);
-        client.serverCmd(hello, new SiteNavigator.SrvCallback() {
+        client.siteServerCmd(hello, this, new SrvCallback() {
             @Override
             public void onSuccess(String result) {
                 if (result == null || result.length() == 0)
                     return;
-                Object obj = null;
+                Object obj;
                 try {
                     JSONTokener tokener = new JSONTokener(result);
                     obj = tokener.nextValue();
@@ -101,7 +98,6 @@ public class SiteNavigator implements Action.ActionExecutor {
                 if (sessionID == null || !sessionID.equals(result))
                     sessionID = id;
                 executeAction(new Action("menu").add("sectID", "site-nav-menu"));
-                executeAction(new Action("home"));
             }
         });
     }
@@ -172,7 +168,7 @@ public class SiteNavigator implements Action.ActionExecutor {
                 }
             }
             else if ("set".equals(act)) {
-                client.serverCmd(action, new SiteNavigator.SrvCallback() {
+                client.siteServerCmd(action, nav, new SrvCallback() {
                     @Override
                     public void onSuccess(String result) {
                         //if (result != null)
@@ -186,7 +182,7 @@ public class SiteNavigator implements Action.ActionExecutor {
                         nav.currentData.currListPosition = Integer.parseInt(action.val("position"));
                     action.del("position");
                 }
-                client.serverCmd(action, new SiteNavigator.SrvCallback() {
+                client.siteServerCmd(action, nav, new SrvCallback() {
                     @Override
                     public void onSuccess(String result) {
                         SSect ds = SSect.fromJson(result);
@@ -200,11 +196,12 @@ public class SiteNavigator implements Action.ActionExecutor {
                 nav.doShowMenu();
             }
             else if ("menu".equals(act)) {
-                client.serverCmd(action, new SiteNavigator.SrvCallback() {
+                client.siteServerCmd(action, nav, new SrvCallback() {
                     @Override
                     public void onSuccess(String result) {
                         SSect ds = SSect.fromJson(result);
                         nav.wholeMenuTree = ds;
+                        client.attachToSite(ds);
                     }
                 });
             }
@@ -222,7 +219,7 @@ public class SiteNavigator implements Action.ActionExecutor {
                 show.setAction("enter");
                 show.add("vname", up.entity.name);
             }
-            client.serverCmd(show, new SiteNavigator.SrvCallback() {
+            client.siteServerCmd(show, nav, new SrvCallback() {
                 @Override
                 public void onSuccess(String result) {
                     SSect ds = SSect.fromJson(result);
@@ -260,7 +257,7 @@ public class SiteNavigator implements Action.ActionExecutor {
                 parent.currListPosition = Integer.parseInt(action.val("position"));
                 action.del("position");
             }
-            client.serverCmd(action, new SiteNavigator.SrvCallback() {
+            client.siteServerCmd(action, nav, new SrvCallback() {
                 @Override
                 public void onSuccess(String result) {
                     SSect ds = SSect.fromJson(result);

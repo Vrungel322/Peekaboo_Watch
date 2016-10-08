@@ -1,16 +1,13 @@
 package com.skinterface.demo.android;
 
-import android.Manifest;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.net.Uri;
 import android.os.AsyncTask;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
+import android.speech.RecognizerIntent;
 import android.support.annotation.NonNull;
-import android.support.v4.content.LocalBroadcastManager;
 import android.support.wearable.activity.WearableActivity;
 import android.util.Log;
 import android.view.GestureDetector;
@@ -39,32 +36,25 @@ import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.ArrayList;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
-import static android.content.pm.PackageManager.PERMISSION_GRANTED;
-
 public class WearActivity extends WearableActivity implements
         View.OnClickListener,
+        ChatNavigator.SrvClient,
         SiteNavigator.SrvClient
 {
     public static final String TAG = "SkinterWatch";
 
     public static final String VOICE_FILE_NAME = "voice.raw";
 
-    static final int REQUEST_MENU = 1000;
+    static final int MENU_REQUEST_CODE      = 1000;
+    static final int SPEECH_REQUEST_CODE    = 1001;
+    static final int AUDIO_REQUEST_CODE     = 1002;
 
     static final int MSG_RSVP_PLAY_STARTED  = 1;
     static final int MSG_RSVP_PLAY_FINISHED = 2;
-
-    static final int MSG_SOUND_PLAY_FAIL    = 10;
-    static final int MSG_SOUND_PLAY_STARTED = 11;
-    static final int MSG_SOUND_PLAY_PROGRESS= 12;
-    static final int MSG_SOUND_PLAY_FINISHED= 13;
-    static final int MSG_SOUND_REC_FAIL     = 14;
-    static final int MSG_SOUND_REC_STARTED  = 15;
-    static final int MSG_SOUND_REC_PROGRESS = 16;
-    static final int MSG_SOUND_REC_FINISHED = 17;
 
     final Handler handler = new Handler() {
         @Override
@@ -76,27 +66,6 @@ public class WearActivity extends WearableActivity implements
             case MSG_RSVP_PLAY_FINISHED:
                 getRsvpFragment().onRsvpPlayStop();
                 break;
-            case MSG_SOUND_PLAY_STARTED:
-                onSoundPlayStart();
-                break;
-            case MSG_SOUND_PLAY_PROGRESS:
-                onSoundPlayProgress(msg.arg1, msg.arg2);
-                break;
-            case MSG_SOUND_PLAY_FINISHED:
-                onSoundPlayStop();
-                break;
-            case MSG_SOUND_REC_FAIL:
-                onSoundRecFail();
-                break;
-            case MSG_SOUND_REC_STARTED:
-                onSoundRecStart();
-                break;
-            case MSG_SOUND_REC_PROGRESS:
-                onSoundRecProgress(msg.arg1, msg.arg2);
-                break;
-            case MSG_SOUND_REC_FINISHED:
-                onSoundRecStop(msg.arg1, msg.arg2);
-                break;
             }
         }
     };
@@ -104,13 +73,12 @@ public class WearActivity extends WearableActivity implements
     private ViewGroup mContainerView;
     private TextView mTitleView;
     private GestureDetector mDetector;
-    private SoundRecorder recorder;
     private SectionsModel model;
 
     private Set<Node> mVoiceNodes;
     private GoogleApiClient mGoogleApiClient;
 
-    final SiteNavigator nav = new SiteNavigator(this);
+    Navigator nav = new SiteNavigator(this);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -186,9 +154,6 @@ public class WearActivity extends WearableActivity implements
     public RsvpFragment getRsvpFragment() {
         return (RsvpFragment)getFragmentManager().findFragmentById(R.id.fr_rsvp);
     }
-    public VoiceFragment getVoiceFragment() {
-        return (VoiceFragment)getFragmentManager().findFragmentByTag("voice_confirm");
-    }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
@@ -216,12 +181,12 @@ public class WearActivity extends WearableActivity implements
             fr.stop();
     }
     public void mergeChatMessage(JSONObject jmsg) {
-        boolean own = jmsg.optBoolean("own");
-        String partner = own ? jmsg.optString("receiver") : jmsg.optString("sender");;
-        if (partner == null || partner.isEmpty())
-            return;
-        ChatSectionsModel model = ChatSectionsModel.getChatModel(partner);
-        model.mergeChatMessage(jmsg);
+        ChatSectionsModel.get().mergeChatMessage(jmsg);
+    }
+
+    public void addChatMessage(String text) {
+        if (model instanceof ChatSectionsModel)
+            ((ChatSectionsModel) model).addChatMessage(text);
     }
 
     @Override
@@ -249,7 +214,15 @@ public class WearActivity extends WearableActivity implements
                 else if ("stop".equals(action)) {
                     stopCurrentSect();
                 }
-                else if ("chat".equals(action)) {
+            } catch (JSONException e) {
+                Log.e(TAG, "Bad json request", e);
+            }
+        }
+        if (intent.hasExtra("CHAT_MESSAGE")) {
+            try {
+                JSONObject jobj = new JSONObject(intent.getStringExtra("CHAT_MESSAGE"));
+                String action = jobj.optString("action");
+                if ("chat".equals(action)) {
                     mergeChatMessage(jobj);
                 }
             } catch (JSONException e) {
@@ -260,12 +233,24 @@ public class WearActivity extends WearableActivity implements
 
     @Override
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if (requestCode == REQUEST_MENU) {
+        if (requestCode == MENU_REQUEST_CODE) {
             if (resultCode == RESULT_OK)
-                exitMenu(SSect.fromJson(data.getStringExtra(WearMenuActivity.RESULT_EXTRA)));
-            return;
+                exitMenu(SSect.fromJson(data.getStringExtra(MenuActivity.RESULT_EXTRA)));
         }
-        super.onActivityResult(requestCode, resultCode, data);
+        else if (requestCode == SPEECH_REQUEST_CODE) {
+            if (resultCode == RESULT_OK) {
+                ArrayList<String> results = data.getStringArrayListExtra(
+                        RecognizerIntent.EXTRA_RESULTS);
+                if (results != null && !results.isEmpty())
+                    addChatMessage(results.get(0));
+            }
+        }
+        else if (requestCode == AUDIO_REQUEST_CODE) {
+            if (resultCode == RESULT_OK)
+                sendVoiceConfirm();
+        }
+        else
+            super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
@@ -336,17 +321,7 @@ public class WearActivity extends WearableActivity implements
             startCardsActivity();
     }
 
-    public SoundRecorder getRecorder() {
-        return recorder;
-    }
-
-    public void sendVoiceAbort() {
-        VoiceFragment fr = getVoiceFragment();
-        if (fr != null)
-            getFragmentManager().beginTransaction().remove(fr).commit();
-    }
-
-    public void sendVoiceConfirm(final VoiceFragment fr) {
+    public void sendVoiceConfirm() {
         new AsyncTask<Void,Void,Boolean>() {
             @Override
             protected Boolean doInBackground(Void... params) {
@@ -384,91 +359,17 @@ public class WearActivity extends WearableActivity implements
                     return Boolean.FALSE;
                 }
             }
-
-            @Override
-            protected void onPostExecute(Boolean res) {
-                if (res == null || !res)
-                    fr.onDataSendFail();
-                else
-                    getFragmentManager().beginTransaction().remove(fr).commit();
-            }
         }.execute();
     }
 
-    public void onSoundRecFail() {
-        new File(getFilesDir(), VOICE_FILE_NAME).delete();
-        VoiceFragment fr = getVoiceFragment();
-        if (fr != null)
-            fr.onSoundRecFail();
+    public void startVoiceRecognition() {
+        Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+        intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        startActivityForResult(intent, SPEECH_REQUEST_CODE);
     }
 
-    public void onSoundRecStart() {
-        VoiceFragment fr = getVoiceFragment();
-        if (fr != null)
-            fr.onSoundRecStart();
-    }
-
-    public void onSoundRecProgress(int millis, int size) {
-        Log.i(TAG, "recording "+millis+" ms / "+size+" bytes");
-        VoiceFragment fr = getVoiceFragment();
-        if (fr != null)
-            fr.onSoundRecProgress(millis, size);
-    }
-
-    public void onSoundRecStop(int millis, int size) {
-        VoiceFragment fr = getVoiceFragment();
-        if (fr != null)
-            fr.onSoundRecStop(millis, size);
-    }
-
-    public void onSoundPlayStart() {
-        VoiceFragment fr = getVoiceFragment();
-        if (fr != null)
-            fr.onSoundPlayStart();
-    }
-
-    public void onSoundPlayProgress(int millis, int total) {
-        Log.i(TAG, "playing "+millis+" ms / "+total+" ms");
-        VoiceFragment fr = getVoiceFragment();
-        if (fr != null)
-            fr.onSoundPlayProgress(millis, total);
-    }
-
-    public void onSoundPlayStop() {
-        VoiceFragment fr = getVoiceFragment();
-        if (fr != null)
-            fr.onSoundPlayStop();
-    }
-
-    public void startRecordVoice() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            int res = checkSelfPermission(Manifest.permission.RECORD_AUDIO);
-            if (res != PERMISSION_GRANTED) {
-                requestPermissions(new String[]{Manifest.permission.RECORD_AUDIO}, 1);
-                return;
-            }
-        }
-        try {
-            if (recorder != null) {
-                if (recorder.getState() != SoundRecorder.State.IDLE)
-                    return;
-            } else {
-                recorder = new SoundRecorder(this, VOICE_FILE_NAME, this.handler);
-            }
-            recorder.startRecording();
-        } catch (Exception e) {
-            Log.e(TAG, "Error on voice recording", e);
-        }
-        VoiceFragment fr = VoiceFragment.create();
-        getFragmentManager().beginTransaction().add(R.id.container, fr, "voice_confirm").commit();
-    }
-
-    public void stopRecordVoice() {
-        try {
-            recorder.stopRecording();
-        } catch (Exception e) {
-            Log.e(TAG, "Error on voice recording", e);
-        }
+    public void startVoiceRecording() {
+        VoiceActivity.startForResult(AUDIO_REQUEST_CODE, this);
     }
 
     private String pickBestNodeId() {
@@ -489,24 +390,27 @@ public class WearActivity extends WearableActivity implements
         if (menu == null)
             return;
         if ("upstars".equals(menu.entity.data)) {
+            nav = new SiteNavigator(this);
             model = UpStarsSectionsModel.get();
             mTitleView.setText("UpStars");
             getRsvpFragment().reset();
             nav.doHello();
         }
         else if ("peekaboo".equals(menu.entity.data)) {
-            model = null;
+            nav = new ChatNavigator(this);
+            model = ChatSectionsModel.get();
             mTitleView.setText("Peekaboo");
             getRsvpFragment().reset();
-            showMenu(ChatSectionsModel.chatMenu);
+            nav.doHello();
         }
         else if ("show".equals(menu.entity.data)) {
-            nav.makeActionHandler(menu.entity).run();
+            if (nav instanceof SiteNavigator)
+                ((SiteNavigator)nav).makeActionHandler(menu.entity).run();
         }
         else if ("chat".equals(menu.entity.data)) {
-            model = ChatSectionsModel.getChatModel(menu.entity.val("room"));
+            ChatSectionsModel.get().setChatRoom(menu.entity.val("room"));
             mTitleView.setText(model.currArticle().title.data);
-            getRsvpFragment().stop();
+            getRsvpFragment().play(model.currArticle());
         }
     }
 
@@ -516,13 +420,13 @@ public class WearActivity extends WearableActivity implements
         if (menu == null)
             return;
         if (menu.children != null && menu.children.length > 0)
-            WearMenuActivity.startForResult(REQUEST_MENU, this, menu);
+            MenuActivity.startForResult(MENU_REQUEST_CODE, this, menu);
         else if (menu.entity.data != null)
             exitMenu(menu);
     }
 
     @Override
-    public SiteNavigator.ActionHandler makeActionHandler(Action action) {
+    public SiteNavigator.ActionHandler makeActionHandler(SiteNavigator nav, Action action) {
         return new ActionHandler(nav, this, action);
     }
 
@@ -544,20 +448,95 @@ public class WearActivity extends WearableActivity implements
         getRsvpFragment().play(sect);
     }
 
+    public void attachToSite(SSect menu) {
+        model = UpStarsSectionsModel.get();
+        ((SiteNavigator)nav).executeAction(new Action("home"));
+    }
+
+    public void attachToChat(JSONObject jobj) {
+        model = ChatSectionsModel.get();
+        ChatSectionsModel.get().setAttachInfo(jobj);
+        nav.doShowMenu();
+    }
+
     @Override
-    public void serverCmd(Action action, final SiteNavigator.SrvCallback callback) {
+    public void chatServerCmd(Action action, ChatNavigator nav, final SrvCallback callback) {
+        final  String reqData = action.serializeToCmd(null, 0).toString();
         String nodeId = pickBestNodeId();
-        if (nodeId == null)
-            return;
-        String reqData = action.serializeToCmd(nav.sessionID, 0).toString();
-        Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, reqData.getBytes(IOUtils.UTF8))
-                .setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
-            @Override
-            public void onResult(@NonNull MessageApi.SendMessageResult sendMessageResult) {
-                if (sendMessageResult.getStatus().isSuccess())
-                    RsvpMessageService.addPendingRequest(sendMessageResult.getRequestId(), callback);
-            }
-        });
+        if (nodeId != null) {
+            Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, IOUtils.CHAT_ACTION_PATH, reqData.getBytes(IOUtils.UTF8))
+                    .setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+                        @Override
+                        public void onResult(@NonNull MessageApi.SendMessageResult sendMessageResult) {
+                            if (sendMessageResult.getStatus().isSuccess())
+                                RsvpMessageService.addPendingRequest(sendMessageResult.getRequestId(), callback);
+                        }
+                    });
+        }
+    }
+
+    @Override
+    public void siteServerCmd(Action action, SiteNavigator nav, final SrvCallback callback) {
+        final  String reqData = action.serializeToCmd(nav.sessionID, 0).toString();
+        String nodeId = pickBestNodeId();
+        if (nodeId != null) {
+            Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, reqData.getBytes(IOUtils.UTF8))
+                    .setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+                        @Override
+                        public void onResult(@NonNull MessageApi.SendMessageResult sendMessageResult) {
+                            if (sendMessageResult.getStatus().isSuccess())
+                                RsvpMessageService.addPendingRequest(sendMessageResult.getRequestId(), callback);
+                        }
+                    });
+        } else {
+            new AsyncTask<Void, Void, String>() {
+                @Override
+                protected String doInBackground(Void... params) {
+                    InputStream is = null;
+                    try {
+                        URL url = new URL(IOUtils.UpStars_JSON_URL);
+                        HttpURLConnection conn = (HttpURLConnection) url.openConnection();
+                        conn.setReadTimeout(5000);
+                        conn.setConnectTimeout(5000);
+                        conn.setRequestMethod("POST");
+                        conn.setDoInput(true);
+                        OutputStream os = conn.getOutputStream();
+                        os.write(reqData.getBytes(IOUtils.UTF8));
+                        os.close();
+                        // Starts the query
+                        conn.connect();
+                        int response = conn.getResponseCode();
+                        Log.d(TAG, "The response is: " + conn.getResponseMessage());
+                        if (response == 200) {
+                            StringBuilder sb = new StringBuilder();
+                            is = conn.getInputStream();
+                            InputStreamReader reader = new InputStreamReader(is, IOUtils.UTF8);
+                            char[] buffer = new char[4096];
+                            int sz;
+                            while ((sz = reader.read(buffer)) > 0)
+                                sb.append(buffer, 0, sz);
+                            reader.close();
+                            return sb.toString();
+                        } else {
+                            cancel(false);
+                            return null;
+                        }
+                    } catch (Throwable e) {
+                        Log.e(TAG, "Server connection error", e);
+                        cancel(false);
+                        return null;
+                    } finally {
+                        IOUtils.safeClose(is);
+                    }
+                }
+
+                @Override
+                protected void onPostExecute(String result) {
+                    if (!isCancelled())
+                        callback.onSuccess(result);
+                }
+            }.execute();
+        }
     }
 
     protected class ActionHandler extends SiteNavigator.BaseActionHandler {

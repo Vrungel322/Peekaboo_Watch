@@ -11,15 +11,26 @@
     <FrameLayout
         android:id="@+id/container"
         android:layout_width="match_parent"
-        android:layout_height="match_parent">
+        android:layout_height="match_parent"
+        android:background="#FF323232"
+        >
+        <ImageView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal|top"
+            android:layout_marginTop="26px"
+            android:src="@drawable/ic_logo"
+            />
 
         <TextView
             android:id="@+id/title"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
+            android:layout_marginTop="72px"
             android:layout_gravity="center_horizontal|top"
-            android:textStyle="bold"
+            android:fontFamily="sans-serif-condensed-light"
+            android:textColor="#d5d5d5"
+            android:textSize="10.3pt"
             android:text="UpStars" />
 
         <fragment android:name="com.skinterface.demo.android.RsvpFragment"

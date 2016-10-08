@@ -17,6 +17,7 @@ package com.skinterface.demo.android;
  */
 
 import android.content.Context;
+import android.content.Intent;
 import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
@@ -26,6 +27,7 @@ import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Handler;
 import android.os.SystemClock;
+import android.support.v4.content.LocalBroadcastManager;
 import android.util.Log;
 
 import java.io.BufferedInputStream;
@@ -46,6 +48,19 @@ public class SoundRecorder {
     public static final int CHANNELS_OUT = AudioFormat.CHANNEL_OUT_MONO;
     public static final int FORMAT = AudioFormat.ENCODING_PCM_16BIT;
 
+    public static final String ACTION_SOUND_PLAY_FAIL     = "action.SOUND_PLAY_FAIL";
+    public static final String ACTION_SOUND_PLAY_STARTED  = "action.SOUND_PLAY_STARTED";
+    public static final String ACTION_SOUND_PLAY_PROGRESS = "action.SOUND_PLAY_PROGRESS";
+    public static final String ACTION_SOUND_PLAY_FINISHED = "action.SOUND_PLAY_FINISHED";
+    public static final String ACTION_SOUND_REC_FAIL      = "action.SOUND_REC_FAIL";
+    public static final String ACTION_SOUND_REC_STARTED   = "action.SOUND_REC_STARTED";
+    public static final String ACTION_SOUND_REC_PROGRESS  = "action.SOUND_REC_PROGRESS";
+    public static final String ACTION_SOUND_REC_FINISHED  = "action.SOUND_REC_FINISHED";
+
+    public static final String EXTRA_FILESIZE = "filesize";
+    public static final String EXTRA_PROGRESS = "millis";
+    public static final String EXTRA_DURATION = "total";
+
     private final String mOutputFileName;
     private final AudioManager mAudioManager;
     private final Context mContext;
@@ -53,7 +68,6 @@ public class SoundRecorder {
     private int mFileSize;
     private int mDuration;
 
-    private Handler mHandler;
     private AsyncTask<Void, Void, Boolean> mRecordingAsyncTask;
     private AsyncTask<Void, Void, Boolean> mPlayingAsyncTask;
 
@@ -61,9 +75,8 @@ public class SoundRecorder {
         IDLE, RECORDING, PLAYING
     }
 
-    public SoundRecorder(Context context, String outputFileName, Handler handler) {
+    public SoundRecorder(Context context, String outputFileName) {
         mOutputFileName = outputFileName;
-        mHandler = handler;
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         mContext = context;
     }
@@ -119,25 +132,31 @@ public class SoundRecorder {
                             mContext.openFileOutput(mOutputFileName, Context.MODE_PRIVATE));
                     byte[] buffer = new byte[BUFFER_SIZE];
                     mAudioRecord.startRecording();
-                    mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_REC_STARTED);
+                    LocalBroadcastManager.getInstance(mContext).sendBroadcast(new Intent(ACTION_SOUND_REC_STARTED));
                     while (!isCancelled()) {
                         int read = mAudioRecord.read(buffer, 0, buffer.length);
                         bufferedOutputStream.write(buffer, 0, read);
                         mFileSize += read;
                         mDuration = (int)(SystemClock.uptimeMillis() - started);
-                        mHandler.obtainMessage(WearActivity.MSG_SOUND_REC_PROGRESS,
-                                mDuration, mFileSize).sendToTarget();
+                        LocalBroadcastManager.getInstance(mContext).sendBroadcast(
+                                new Intent(ACTION_SOUND_REC_PROGRESS)
+                                        .putExtra(EXTRA_PROGRESS, mDuration)
+                                        .putExtra(EXTRA_DURATION, mDuration)
+                                        .putExtra(EXTRA_FILESIZE, mFileSize));
                     }
                     mDuration = (int)(SystemClock.uptimeMillis() - started);
                     bufferedOutputStream.close();
                     mState = State.IDLE;
-                    mHandler.obtainMessage(WearActivity.MSG_SOUND_REC_FINISHED,
-                            mDuration, mFileSize, mOutputFileName).sendToTarget();
+                    LocalBroadcastManager.getInstance(mContext).sendBroadcast(
+                            new Intent(ACTION_SOUND_REC_FINISHED)
+                                    .putExtra(EXTRA_PROGRESS, mDuration)
+                                    .putExtra(EXTRA_DURATION, mDuration)
+                                    .putExtra(EXTRA_FILESIZE, mFileSize));
                     return Boolean.TRUE;
                 } catch (Exception e) {
                     Log.e(TAG, "Failed to record data: " + e);
                     mState = State.IDLE;
-                    mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_REC_FAIL);
+                    LocalBroadcastManager.getInstance(mContext).sendBroadcast(new Intent(ACTION_SOUND_REC_FAIL));
                     return Boolean.FALSE;
                 } finally {
                     IOUtils.safeClose(bufferedOutputStream);
@@ -190,7 +209,7 @@ public class SoundRecorder {
 
         if (!new File(mContext.getFilesDir(), mOutputFileName).exists()) {
             // there is no recording to play
-            mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_PLAY_FAIL);
+            LocalBroadcastManager.getInstance(mContext).sendBroadcast(new Intent(ACTION_SOUND_PLAY_FAIL));
             return;
         }
         final int intSize = AudioTrack.getMinBufferSize(RECORDING_RATE, CHANNELS_OUT, FORMAT);
@@ -217,23 +236,25 @@ public class SoundRecorder {
                         mAudioTrack.setVolume(AudioTrack.getMaxVolume() / 2);
                     mAudioTrack.play();
                     long started = SystemClock.uptimeMillis();
-                    mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_PLAY_STARTED);
+                    LocalBroadcastManager.getInstance(mContext).sendBroadcast(new Intent(ACTION_SOUND_PLAY_STARTED));
                     in = mContext.openFileInput(mOutputFileName);
                     BufferedInputStream bis = new BufferedInputStream(in);
                     int read;
                     while (!isCancelled() && (read = bis.read(buffer, 0, buffer.length)) > 0) {
                         mAudioTrack.write(buffer, 0, read);
                         int millis = (int)(SystemClock.uptimeMillis() - started);
-                        mHandler.obtainMessage(WearActivity.MSG_SOUND_PLAY_PROGRESS,
-                                millis, mDuration).sendToTarget();
+                        LocalBroadcastManager.getInstance(mContext).sendBroadcast(
+                                new Intent(ACTION_SOUND_PLAY_PROGRESS)
+                                        .putExtra(EXTRA_PROGRESS, millis)
+                                        .putExtra(EXTRA_DURATION, mDuration));
                     }
                     mState = State.IDLE;
-                    mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_PLAY_FINISHED);
+                    LocalBroadcastManager.getInstance(mContext).sendBroadcast(new Intent(ACTION_SOUND_PLAY_FINISHED));
                     return Boolean.TRUE;
                 } catch (Exception e) {
                     Log.e(TAG, "Failed to playback", e);
                     mState = State.IDLE;
-                    mHandler.sendEmptyMessage(WearActivity.MSG_SOUND_PLAY_FAIL);
+                    LocalBroadcastManager.getInstance(mContext).sendBroadcast(new Intent(ACTION_SOUND_PLAY_FAIL));
                 } finally {
                     IOUtils.safeClose(in);
                     if (mAudioTrack != null)

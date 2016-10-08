@@ -10,6 +10,15 @@ import java.util.Arrays;
 
 /**
  * Words for Rapid Serial Visual Presentation
+ *
+ * Word's in sequence have duration, measured in 1/60
+ * of a second, to be presented on screens with 60fps.
+ *
+ * Default duration is 6 frames, 10 words per second,
+ * 600 words per minute. This duration is for short words.
+ * Very long words have extended duration, words
+ * before commas and dots also lasts longer to mark the
+ * pause of commas and dots.
  */
 public final class RsvpWords {
 
@@ -84,10 +93,10 @@ public final class RsvpWords {
         return this;
     }
     public RsvpWords addTitleWords(SEntity entity) {
-        return addWords(JR_TITLE, '§', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
+        return addWords(JR_TITLE, '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addIntroWords(SEntity entity) {
-        return addWords(JR_INTRO, '¶', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
+        return addWords(JR_INTRO, '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addArticleWords(SEntity entity) {
         return addWords(JR_ARTICLE, '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);

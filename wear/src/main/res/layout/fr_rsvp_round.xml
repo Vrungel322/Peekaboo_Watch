@@ -11,21 +11,21 @@
         android:layout_gravity="center_horizontal|top"
         android:layout_marginTop="32dp"
         android:typeface="monospace"
+        android:visibility="invisible"
         android:text="15:25" />
 
     <com.skinterface.demo.android.RsvpView
         android:id="@+id/rsvp"
         android:layout_width="match_parent"
-        android:layout_height="160px"
-        android:layout_gravity="center_vertical|fill_horizontal"
-        android:layout_marginBottom="16dp"
+        android:layout_height="116px"
+        android:layout_gravity="top|fill_horizontal"
+        android:layout_marginTop="156px"
         />
 
     <LinearLayout
         android:layout_width="wrap_content"
-        android:layout_height="48dp"
+        android:layout_height="wrap_content"
         android:layout_gravity="bottom|center_horizontal"
-        android:layout_marginBottom="36dp"
         >
 
         <android.support.wearable.view.CircularButton
@@ -37,12 +37,13 @@
             />
         <android.support.wearable.view.CircularButton
             android:id="@+id/record"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:layout_marginLeft="16dp"
-            android:layout_marginRight="16dp"
+            android:layout_width="140px"
+            android:layout_height="140px"
+            android:layout_marginTop="72px"
+            android:layout_marginBottom="-32px"
             app:imageScaleMode="center"
-            android:src="@drawable/ic_mic_black_48dp"
+            android:color="#248F8F"
+            android:src="@drawable/ic_record"
             />
         <android.support.wearable.view.CircularButton
             android:id="@+id/next"

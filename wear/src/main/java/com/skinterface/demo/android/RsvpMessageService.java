@@ -33,6 +33,8 @@ public class RsvpMessageService extends WearableListenerService {
     }
 
     public static synchronized void addPendingRequest(int requestId, final SrvCallback callback) {
+        if (callback == null)
+            return;
         Request req = requests.get(requestId);
         if (req != null) {
             long time = SystemClock.uptimeMillis();

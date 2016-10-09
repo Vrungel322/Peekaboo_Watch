@@ -5,7 +5,7 @@ import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
-import android.os.Message;
+import android.os.Looper;
 import android.speech.RecognizerIntent;
 import android.support.annotation.NonNull;
 import android.support.wearable.activity.WearableActivity;
@@ -19,6 +19,7 @@ import android.widget.TextView;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
+import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.CapabilityApi;
 import com.google.android.gms.wearable.CapabilityInfo;
@@ -37,6 +38,7 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
@@ -53,22 +55,7 @@ public class WearActivity extends WearableActivity implements
     static final int SPEECH_REQUEST_CODE    = 1001;
     static final int AUDIO_REQUEST_CODE     = 1002;
 
-    static final int MSG_RSVP_PLAY_STARTED  = 1;
-    static final int MSG_RSVP_PLAY_FINISHED = 2;
-
-    final Handler handler = new Handler() {
-        @Override
-        public void handleMessage(Message msg) {
-            switch (msg.what) {
-            case MSG_RSVP_PLAY_STARTED:
-                getRsvpFragment().onRsvpPlayStart();
-                break;
-            case MSG_RSVP_PLAY_FINISHED:
-                getRsvpFragment().onRsvpPlayStop();
-                break;
-            }
-        }
-    };
+    final Handler handler = new Handler(Looper.getMainLooper());
 
     private ViewGroup mContainerView;
     private TextView mTitleView;
@@ -173,7 +160,7 @@ public class WearActivity extends WearableActivity implements
             return;
         RsvpFragment fr = getRsvpFragment();
         if (fr != null)
-            fr.play(sect);
+            fr.load(sect, true);
     }
     public void stopCurrentSect() {
         RsvpFragment fr = getRsvpFragment();
@@ -209,7 +196,7 @@ public class WearActivity extends WearableActivity implements
                 }
                 else if ("menu".equals(action)) {
                     model = UpStarsSectionsModel.get();
-                    getRsvpFragment().play(UpStarsSectionsModel.get().currArticle());
+                    getRsvpFragment().load(UpStarsSectionsModel.get().currArticle(), true);
                 }
                 else if ("stop".equals(action)) {
                     stopCurrentSect();
@@ -393,14 +380,14 @@ public class WearActivity extends WearableActivity implements
             nav = new SiteNavigator(this);
             model = UpStarsSectionsModel.get();
             mTitleView.setText("UpStars");
-            getRsvpFragment().reset();
+            getRsvpFragment().load(null, false);
             nav.doHello();
         }
         else if ("peekaboo".equals(menu.entity.data)) {
             nav = new ChatNavigator(this);
             model = ChatSectionsModel.get();
             mTitleView.setText("Peekaboo");
-            getRsvpFragment().reset();
+            getRsvpFragment().load(null, false);
             nav.doHello();
         }
         else if ("show".equals(menu.entity.data)) {
@@ -408,9 +395,13 @@ public class WearActivity extends WearableActivity implements
                 ((SiteNavigator)nav).makeActionHandler(menu.entity).run();
         }
         else if ("chat".equals(menu.entity.data)) {
-            ChatSectionsModel.get().setChatRoom(menu.entity.val("room"));
-            mTitleView.setText(model.currArticle().title.data);
-            getRsvpFragment().play(model.currArticle());
+            String id = menu.entity.val("room");
+            SSect chat = ChatSectionsModel.get().setChatRoom(id);
+            if (chat != null) {
+                mTitleView.setText(chat.title.data);
+                chatServerCmd(new Action("list-messages").add("id", id), null, null);
+                getRsvpFragment().load_to_child(chat, chat.children.length, false);
+            }
         }
     }
 
@@ -433,19 +424,19 @@ public class WearActivity extends WearableActivity implements
     @Override
     public void enterToRoom(SSect sect) {
         UpStarsSectionsModel.get().enterRoom(sect);
-        getRsvpFragment().play(sect);
+        getRsvpFragment().load(sect, true);
     }
 
     @Override
     public void returnToRoom(SSect sect) {
         UpStarsSectionsModel.get().enterRoom(sect);
-        getRsvpFragment().play(sect);
+        getRsvpFragment().load(sect, true);
     }
 
     @Override
     public void showWhereAmIData(SSect sect) {
         UpStarsSectionsModel.get().enterRoom(sect);
-        getRsvpFragment().play(sect);
+        getRsvpFragment().load(sect, true);
     }
 
     public void attachToSite(SSect menu) {
@@ -461,11 +452,22 @@ public class WearActivity extends WearableActivity implements
 
     @Override
     public void chatServerCmd(Action action, ChatNavigator nav, final SrvCallback callback) {
-        final  String reqData = action.serializeToCmd(null, 0).toString();
+        Uri.Builder uri = new Uri.Builder().path(IOUtils.CHAT_ACTION_PATH+action.getAction());
+        if (action.params != null) {
+            for (Map.Entry<String, String> e : action.params.entrySet()) {
+                if (e.getValue() != null)
+                    uri.appendQueryParameter(e.getKey(), e.getValue());
+                else
+                    uri.appendQueryParameter(e.getKey(), "");
+            }
+        }
+        String reqData = "";
         String nodeId = pickBestNodeId();
         if (nodeId != null) {
-            Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, IOUtils.CHAT_ACTION_PATH, reqData.getBytes(IOUtils.UTF8))
-                    .setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+            PendingResult<MessageApi.SendMessageResult> result = Wearable.MessageApi.sendMessage(
+                    mGoogleApiClient, nodeId, uri.toString(), reqData.getBytes(IOUtils.UTF8));
+            if (callback != null)
+                result.setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
                         @Override
                         public void onResult(@NonNull MessageApi.SendMessageResult sendMessageResult) {
                             if (sendMessageResult.getStatus().isSuccess())
@@ -480,15 +482,19 @@ public class WearActivity extends WearableActivity implements
         final  String reqData = action.serializeToCmd(nav.sessionID, 0).toString();
         String nodeId = pickBestNodeId();
         if (nodeId != null) {
-            Wearable.MessageApi.sendMessage(mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, reqData.getBytes(IOUtils.UTF8))
-                    .setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+            PendingResult<MessageApi.SendMessageResult> result = Wearable.MessageApi.sendMessage(
+                    mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, reqData.getBytes(IOUtils.UTF8));
+            if (callback != null)
+                result.setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
                         @Override
                         public void onResult(@NonNull MessageApi.SendMessageResult sendMessageResult) {
                             if (sendMessageResult.getStatus().isSuccess())
                                 RsvpMessageService.addPendingRequest(sendMessageResult.getRequestId(), callback);
                         }
                     });
-        } else {
+        }
+        else
+        {
             new AsyncTask<Void, Void, String>() {
                 @Override
                 protected String doInBackground(Void... params) {
@@ -532,7 +538,7 @@ public class WearActivity extends WearableActivity implements
 
                 @Override
                 protected void onPostExecute(String result) {
-                    if (!isCancelled())
+                    if (!isCancelled() && callback != null)
                         callback.onSuccess(result);
                 }
             }.execute();

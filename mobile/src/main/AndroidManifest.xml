@@ -30,6 +30,7 @@
             <intent-filter>
                 <action android:name="com.skinterface.demo.android.BindToChat"/>
                 <action android:name="com.skinterface.demo.android.UnBindChat"/>
+                <action android:name="com.skinterface.demo.android.SearchNodes"/>
             </intent-filter>
         </service>
 

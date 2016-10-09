@@ -134,6 +134,9 @@ public class RsvpService extends Service implements
         else if ("com.skinterface.demo.android.UnBindChat".equals(intent.getAction())) {
             chatDisconnect();
         }
+        else if ("com.skinterface.demo.android.SearchNodes".equals(intent.getAction())) {
+            setupRsvpNodes();
+        }
         return START_STICKY;
     }
 
@@ -280,13 +283,29 @@ public class RsvpService extends Service implements
         Uri uri = Uri.parse(msg.getPath());
         if (msg.getPath().startsWith(IOUtils.CHAT_ACTION_PATH)) {
             byte[] responce = null;
-            if (mChatService != null && mChatAttachInfo != null) {
-                try {
-                    JSONObject jres = new JSONObject(mChatAttachInfo);
-                    jres.put("action", "attach");
-                    responce = jres.toString().getBytes(IOUtils.UTF8);
-                } catch (Exception e) {
-                    Log.e(TAG, "Error sending voice", e);
+            if (mChatService != null) {
+                String action = uri.getPath().substring(IOUtils.CHAT_ACTION_PATH.length());
+                Map<String, String> params = new TreeMap<>();
+                for (String p : uri.getQueryParameterNames())
+                    params.put(p, uri.getQueryParameter(p));
+                if ("attach".equals(action)) {
+                    if (mChatAttachInfo != null) {
+                        try {
+                            JSONObject jres = new JSONObject(mChatAttachInfo);
+                            jres.put("action", "attach");
+                            responce = jres.toString().getBytes(IOUtils.UTF8);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error sending voice", e);
+                        }
+                    }
+                } else {
+                    try {
+                        String replay = mChatService.post(action, params, new String(msg.getData(), IOUtils.UTF8));
+                        if (replay != null)
+                            responce = replay.getBytes(IOUtils.UTF8);
+                    } catch (RemoteException e) {
+                        e.printStackTrace();
+                    }
                 }
             }
             Wearable.MessageApi.sendMessage(mGoogleApiClient, msg.getSourceNodeId(), IOUtils.CHAT_REPLAY_PATH+msg.getRequestId(), responce);

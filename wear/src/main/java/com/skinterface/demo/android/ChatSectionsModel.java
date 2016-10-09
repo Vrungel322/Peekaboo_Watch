@@ -59,9 +59,10 @@ public class ChatSectionsModel extends SectionsModel {
     private ChatSectionsModel() {
     }
 
-    public void setChatRoom(String partnerId) {
+    public SSect setChatRoom(String partnerId) {
         chat_room = chatRooms.get(partnerId);
         notifyDataChanged();
+        return chat_room;
     }
 
     public SSect currArticle() {

@@ -31,7 +31,7 @@
             android:fontFamily="sans-serif-condensed-light"
             android:textColor="#d5d5d5"
             android:textSize="10.3pt"
-            android:text="UpStars" />
+            android:text="Skinterface" />
 
         <fragment android:name="com.skinterface.demo.android.RsvpFragment"
                   android:id="@+id/fr_rsvp"

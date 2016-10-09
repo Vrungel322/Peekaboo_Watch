@@ -188,6 +188,11 @@ public class MainActivity extends AppCompatActivity implements
                         RsvpService.choosenNode = RsvpService.wearNodes[which];
                         RsvpService.choosenNodeId = RsvpService.choosenNode.getId();
                     }
+                    else if (which == DialogInterface.BUTTON_NEUTRAL) {
+                        Intent intent = new Intent(MainActivity.this, RsvpService.class);
+                        intent.setAction("com.skinterface.demo.android.SearchNodes");
+                        startService(intent);
+                    }
                     else if (which == DialogInterface.BUTTON_NEGATIVE) {
                         RsvpService.choosenNode = null;
                         RsvpService.choosenNodeId = null;
@@ -197,6 +202,7 @@ public class MainActivity extends AppCompatActivity implements
                 }
             };
             AlertDialog.Builder builder = new AlertDialog.Builder(this).setTitle("Watch connection");
+            builder.setNeutralButton("Search", listener);
             if (nodes.length == 0)
                 builder.setMessage("No nearby nodes");
             else

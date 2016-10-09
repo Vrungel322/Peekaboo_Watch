@@ -7,7 +7,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
 public abstract class SectionsModel {
 
     public interface SectionsListener {
-        void onSectionsChanged();
+        void onSectionsChanged(SectionsModel model);
     }
 
     private final CopyOnWriteArrayList<SectionsListener> listeners = new CopyOnWriteArrayList<>();
@@ -25,7 +25,7 @@ public abstract class SectionsModel {
     protected void notifyDataChanged() {
         for (SectionsListener l : listeners) {
             if (l != null)
-                l.onSectionsChanged();
+                l.onSectionsChanged(this);
         }
     }
 

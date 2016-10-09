@@ -130,6 +130,11 @@ public class MainActivity extends AppCompatActivity implements
         LocalBroadcastManager.getInstance(this).registerReceiver(broadcastReceiver, intentFilter);
     }
 
+    @Override
+    public boolean isStory() {
+        return false;
+    }
+
     public void attachToSite(SSect menu) {
         nav.executeAction(new Action("home"));
     }

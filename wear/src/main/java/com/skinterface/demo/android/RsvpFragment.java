@@ -8,6 +8,7 @@ import android.content.IntentFilter;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.support.v4.content.LocalBroadcastManager;
+import android.support.wearable.view.CircularButton;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
 import android.text.style.StyleSpan;
@@ -22,13 +23,17 @@ import android.widget.TextView;
 import static com.skinterface.demo.android.WearActivity.TAG;
 
 public class RsvpFragment extends Fragment implements
+        SectionsModel.SectionsListener,
         View.OnClickListener,
-        GestureDetector.OnGestureListener, View.OnLongClickListener {
+        GestureDetector.OnGestureListener,
+        View.OnLongClickListener
+{
     private static final int STATE_INIT    = 0;
     private static final int STATE_DONE    = 1;
-    private static final int STATE_TITLE   = 2;
-    private static final int STATE_ARTICLE = 3;
-    private static final int STATE_CHILD   = 4;
+    private static final int STATE_COMPOSE = 2;
+    private static final int STATE_TITLE   = 3;
+    private static final int STATE_ARTICLE = 4;
+    private static final int STATE_CHILD   = 5;
 
     private static final int[] TICS = {
             50, //calcTic(200),
@@ -62,6 +67,9 @@ public class RsvpFragment extends Fragment implements
 
 
     RsvpView mRsvpView;
+    CircularButton mRecordButton;
+    CircularButton mPrevButton;
+    CircularButton mNextButton;
     TextView mPositionView;
     TextView mPrevText;
     TextView mNextText;
@@ -70,19 +78,24 @@ public class RsvpFragment extends Fragment implements
     RsvpWords words;
     int state;
 
+
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle saved) {
         LocalBroadcastManager.getInstance(getActivity()).registerReceiver(
                 broadcastReceiver, new IntentFilter(RsvpView.ACTION_RSVP_EVENT));
         View view = inflater.inflate(R.layout.fr_rsvp_round, container, false);
-        view.findViewById(R.id.next).setOnClickListener(this);
-        view.findViewById(R.id.prev).setOnClickListener(this);
-        view.findViewById(R.id.record).setOnClickListener(this);
-        view.findViewById(R.id.record).setOnLongClickListener(this);
+        mPrevButton = (CircularButton) view.findViewById(R.id.prev);
+        mNextButton = (CircularButton) view.findViewById(R.id.next);
+        mRecordButton = (CircularButton) view.findViewById(R.id.record);
         mRsvpView = (RsvpView) view.findViewById(R.id.rsvp);
         mPositionView = (TextView) view.findViewById(R.id.position);
         mPrevText = (TextView) view.findViewById(R.id.prev_text);
         mNextText = (TextView) view.findViewById(R.id.next_text);
+
+        mPrevButton.setOnClickListener(this);
+        mNextButton.setOnClickListener(this);
+        mRecordButton.setOnClickListener(this);
+        mRecordButton.setOnLongClickListener(this);
         return view;
     }
 
@@ -108,9 +121,24 @@ public class RsvpFragment extends Fragment implements
     public void load(SSect sect, boolean play) {
         if (this.sect == sect)
             return;
-        this.state = STATE_INIT;
         this.sect = sect;
         this.words = null;
+        if (sect != null &&
+                "chat-text-msg".equals(sect.entity.media) &&
+                "composing".equals(sect.entity.role))
+        {
+            this.state = STATE_COMPOSE;
+            mPrevButton.setImageResource(R.drawable.ic_close);
+            mPrevButton.setVisibility(View.VISIBLE);
+            mRecordButton.setImageResource(R.drawable.ic_send);
+        } else {
+            if (this.state == STATE_COMPOSE) {
+                mPrevButton.setImageResource(R.drawable.ic_close);
+                mPrevButton.setVisibility(View.INVISIBLE);
+                mRecordButton.setImageResource(R.drawable.ic_record);
+            }
+            this.state = STATE_INIT;
+        }
         onNext(play);
     }
 
@@ -196,6 +224,12 @@ public class RsvpFragment extends Fragment implements
             mPositionView.setText(getSpeedString());
             return;
         }
+        if (state == STATE_COMPOSE) {
+            words = new RsvpWords();
+            words.addTitleWords(sect.title);
+            mRsvpView.load(words, play);
+            return;
+        }
         if (state == STATE_INIT || state == STATE_DONE) {
             mRsvpView.stop(null);
             mRsvpView.load(words, play);
@@ -241,6 +275,12 @@ public class RsvpFragment extends Fragment implements
         }
         if (play && mRsvpView.isPaused()) {
             mRsvpView.resume();
+            return;
+        }
+        if (state == STATE_COMPOSE) {
+            words = new RsvpWords();
+            words.addTitleWords(sect.title);
+            mRsvpView.load(words, play);
             return;
         }
         if (state == STATE_INIT || state == STATE_DONE) {
@@ -301,6 +341,12 @@ public class RsvpFragment extends Fragment implements
             return;
         }
 
+        if (state == STATE_COMPOSE) {
+            words = new RsvpWords();
+            words.addTitleWords(sect.title);
+            mRsvpView.load(words, false);
+            return;
+        }
         if (state > STATE_CHILD) {
             int pos = state - STATE_CHILD - 1;
             if (pos >= sect.children.length)
@@ -330,24 +376,27 @@ public class RsvpFragment extends Fragment implements
         updatePosView(false);
     }
 
-    public void onRsvpPlayStart() {
-        updatePosView(true);
-    }
-
-    public void onRsvpPlayStop() {
+    @Override
+    public void onSectionsChanged(SectionsModel model) {
         updatePosView(false);
     }
 
     @Override
     public void onClick(View v) {
-        if (v.getId() == R.id.record) {
-            ((WearActivity) getActivity()).startVoiceRecognition();
-        }
-        else if (v.getId() == R.id.next) {
-            onNext(true);
-        }
-        else if (v.getId() == R.id.prev) {
-            onPrev();
+        if (state == STATE_COMPOSE) {
+            if (v.getId() == R.id.record)
+                ((WearActivity) getActivity()).composeNewChatMessageResult(true); // send
+            else if (v.getId() == R.id.next)
+                onNext(true);
+            else if (v.getId() == R.id.prev)
+                ((WearActivity) getActivity()).composeNewChatMessageResult(false); // cancel
+        } else {
+            if (v.getId() == R.id.record)
+                ((WearActivity) getActivity()).startVoiceRecognition();
+            else if (v.getId() == R.id.next)
+                onNext(true);
+            else if (v.getId() == R.id.prev)
+                onPrev();
         }
     }
 

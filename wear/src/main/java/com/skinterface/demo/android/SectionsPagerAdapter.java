@@ -36,7 +36,7 @@ public class SectionsPagerAdapter extends FragmentGridPagerAdapter implements Se
     }
 
     @Override
-    public void onSectionsChanged() {
+    public void onSectionsChanged(SectionsModel model) {
         notifyDataSetChanged();
     }
 

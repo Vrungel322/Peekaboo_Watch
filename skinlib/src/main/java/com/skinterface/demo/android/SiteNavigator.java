@@ -37,6 +37,7 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
     SSect currentData;
 
     public interface SrvClient {
+        boolean isStory();
         ActionHandler makeActionHandler(SiteNavigator nav, Action action);
         void attachToSite(SSect menu);
         void enterToRoom(SSect sect);
@@ -75,6 +76,25 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
         return client.makeActionHandler(this, action);
     }
 
+    @Override
+    public SSect currArticle() {
+        return currentData;
+    }
+
+    @Override
+    public int currChildrenCount() {
+        if (currentData == null || currentData.children == null)
+            return 0;
+        return currentData.children.length;
+    }
+
+    @Override
+    public SSect currChildren(int i) {
+        if (currentData == null || currentData.children == null || i < 0 || i >= currentData.children.length)
+            return null;
+        return currentData.children[i];
+    }
+
     public void doHello() {
         String lang = Locale.getDefault().getLanguage();
         Action hello = Action.create("hello");
@@ -97,7 +117,8 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
                 String id = jobj.optString("session");
                 if (sessionID == null || !sessionID.equals(result))
                     sessionID = id;
-                executeAction(new Action("menu").add("sectID", "site-nav-menu"));
+                String nav_menu = client.isStory() ? "site-nav-menu-story" : "site-nav-menu";
+                executeAction(new Action("menu").add("sectID", nav_menu));
             }
         });
     }
@@ -128,6 +149,9 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
             client.showMenu(chooseModelMenu);
         else
             client.showMenu(wholeMenuTree);
+    }
+
+    public void doReturn() {
     }
 
 

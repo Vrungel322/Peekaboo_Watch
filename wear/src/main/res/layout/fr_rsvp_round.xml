@@ -54,8 +54,7 @@
         android:layout_alignTop="@+id/prev"
         android:layout_toLeftOf="@+id/prev"
         android:layout_height="wrap_content"
-        android:fontFamily="sans-serif-condensed-light"
-        android:text="3" />
+        android:fontFamily="sans-serif-condensed-light" />
 
     <android.support.wearable.view.CircularButton
         android:id="@+id/next"
@@ -75,8 +74,7 @@
         android:layout_alignTop="@+id/next"
         android:layout_toRightOf="@+id/next"
         android:layout_height="wrap_content"
-        android:fontFamily="sans-serif-condensed-light"
-        android:text="5" />
+        android:fontFamily="sans-serif-condensed-light" />
 
 
 </RelativeLayout>

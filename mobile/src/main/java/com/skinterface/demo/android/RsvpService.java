@@ -314,23 +314,24 @@ public class RsvpService extends Service implements
         if (msg.getPath().startsWith(IOUtils.CHAT_POST_PATH)) {
             if (mChatService != null) {
                 try {
+                    Map<String,String> params = new TreeMap<>();
                     String path = uri.getPath().substring(IOUtils.CHAT_POST_PATH.length());
                     if (path.startsWith("/voice/")) {
                         path = new File(getCacheDir(), path.substring(7)).getAbsolutePath();
                         new File(path).setReadable(true, false);
+                        params.put("audio", path);
                     }
-                    Map<String,String> params = new TreeMap<>();
-                    params.put("audio", path);
                     for (String p : uri.getQueryParameterNames())
                         params.put(p, uri.getQueryParameter(p));
-                    String res = mChatService.post("post", params, new String(msg.getData(), IOUtils.UTF8));
+                    String data = msg.getData() == null ? null : new String(msg.getData(), IOUtils.UTF8);
+                    String res = mChatService.post("post", params, data);
                     if (res != null) {
                         JSONObject jres = new JSONObject(res);
                         jres.put("action", "chat");
                         Wearable.MessageApi.sendMessage(mGoogleApiClient, msg.getSourceNodeId(), IOUtils.RSVP_ACTION_PATH, jres.toString().getBytes(IOUtils.UTF8));
                     }
                 } catch (Exception e) {
-                    Log.e(TAG, "Error sending voice", e);
+                    Log.e(TAG, "Error sending char text/voice", e);
                 }
             }
             return;

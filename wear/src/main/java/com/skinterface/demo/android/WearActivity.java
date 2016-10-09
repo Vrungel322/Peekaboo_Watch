@@ -60,7 +60,6 @@ public class WearActivity extends WearableActivity implements
     private ViewGroup mContainerView;
     private TextView mTitleView;
     private GestureDetector mDetector;
-    private SectionsModel model;
 
     private Set<Node> mVoiceNodes;
     private GoogleApiClient mGoogleApiClient;
@@ -155,7 +154,7 @@ public class WearActivity extends WearableActivity implements
     }
 
     public void playCurrentSect() {
-        SSect sect = model.currArticle();
+        SSect sect = nav.currArticle();
         if (sect == null)
             return;
         RsvpFragment fr = getRsvpFragment();
@@ -168,12 +167,17 @@ public class WearActivity extends WearableActivity implements
             fr.stop();
     }
     public void mergeChatMessage(JSONObject jmsg) {
-        ChatSectionsModel.get().mergeChatMessage(jmsg);
+        ChatNavigator.mergeChatMessage(jmsg);
     }
 
-    public void addChatMessage(String text) {
-        if (model instanceof ChatSectionsModel)
-            ((ChatSectionsModel) model).addChatMessage(text);
+    public void composeNewChatMessage(String text) {
+        if (nav instanceof ChatNavigator)
+            ((ChatNavigator) nav).composeNewChatMessage(text);
+    }
+
+    public void composeNewChatMessageResult(boolean confirmed) {
+        if (nav instanceof ChatNavigator)
+            ((ChatNavigator) nav).composeNewChatMessageResult(confirmed);
     }
 
     @Override
@@ -181,30 +185,30 @@ public class WearActivity extends WearableActivity implements
         super.onNewIntent(intent);
         setIntent(intent);
 
-        if (intent.hasExtra("RSVP_MESSAGE")) {
-            try {
-                JSONObject jobj = new JSONObject(intent.getStringExtra("RSVP_MESSAGE"));
-                String action = jobj.optString("action");
-                if ("sect".equals(action)) {
-                    SSect sect = SSect.fromJson(jobj);
-                    if (sect != null) {
-                        if (model instanceof UpStarsSectionsModel) {
-                            ((UpStarsSectionsModel) model).enterRoom(sect);
-                            playCurrentSect();
-                        }
-                    }
-                }
-                else if ("menu".equals(action)) {
-                    model = UpStarsSectionsModel.get();
-                    getRsvpFragment().load(UpStarsSectionsModel.get().currArticle(), true);
-                }
-                else if ("stop".equals(action)) {
-                    stopCurrentSect();
-                }
-            } catch (JSONException e) {
-                Log.e(TAG, "Bad json request", e);
-            }
-        }
+//        if (intent.hasExtra("RSVP_MESSAGE")) {
+//            try {
+//                JSONObject jobj = new JSONObject(intent.getStringExtra("RSVP_MESSAGE"));
+//                String action = jobj.optString("action");
+//                if ("sect".equals(action)) {
+//                    SSect sect = SSect.fromJson(jobj);
+//                    if (sect != null) {
+//                        if (nav instanceof UpStarsSectionsModel) {
+//                            ((UpStarsSectionsModel) model).enterRoom(sect);
+//                            playCurrentSect();
+//                        }
+//                    }
+//                }
+//                else if ("menu".equals(action)) {
+//                    model = UpStarsSectionsModel.get();
+//                    getRsvpFragment().load(UpStarsSectionsModel.get().currArticle(), true);
+//                }
+//                else if ("stop".equals(action)) {
+//                    stopCurrentSect();
+//                }
+//            } catch (JSONException e) {
+//                Log.e(TAG, "Bad json request", e);
+//            }
+//        }
         if (intent.hasExtra("CHAT_MESSAGE")) {
             try {
                 JSONObject jobj = new JSONObject(intent.getStringExtra("CHAT_MESSAGE"));
@@ -229,12 +233,15 @@ public class WearActivity extends WearableActivity implements
                 ArrayList<String> results = data.getStringArrayListExtra(
                         RecognizerIntent.EXTRA_RESULTS);
                 if (results != null && !results.isEmpty())
-                    addChatMessage(results.get(0));
+                    composeNewChatMessage(results.get(0));
             }
         }
         else if (requestCode == AUDIO_REQUEST_CODE) {
-            if (resultCode == RESULT_OK)
-                sendVoiceConfirm();
+            if (resultCode == RESULT_OK && nav instanceof ChatNavigator) {
+                String sender = ((ChatNavigator)nav).getUserId();
+                String receiver = ((ChatNavigator)nav).getPartnerId();
+                sendVoiceConfirm(sender, receiver);
+            }
         }
         else
             super.onActivityResult(requestCode, resultCode, data);
@@ -308,7 +315,38 @@ public class WearActivity extends WearableActivity implements
             startCardsActivity();
     }
 
-    public void sendVoiceConfirm() {
+    public void sendChatConfirm(final String sender, final String receiver, final String text) {
+        new AsyncTask<Void,Void,Boolean>() {
+            @Override
+            protected Boolean doInBackground(Void... params) {
+                try {
+                    String nodeId = pickBestNodeId();
+                    if (nodeId == null)
+                        return Boolean.FALSE;
+                    long timestamp = System.currentTimeMillis();
+                    String post = new Uri.Builder()
+                            .path(IOUtils.CHAT_POST_PATH)
+                            .toString();
+                    JSONObject json = new JSONObject();
+                    json.put("timestamp", timestamp);
+                    json.put("receiver", receiver);
+                    json.put("sender", sender);
+                    json.put("text", text);
+                    byte[] data = json.toString().getBytes(IOUtils.UTF8);
+                    MessageApi.SendMessageResult messageResult = Wearable.MessageApi
+                            .sendMessage(mGoogleApiClient, nodeId, post, data).await();
+                    if (!messageResult.getStatus().isSuccess())
+                        return Boolean.FALSE;
+                    return Boolean.TRUE;
+                } catch (Exception e) {
+                    Log.e(TAG, "Error during audio message post", e);
+                    return Boolean.FALSE;
+                }
+            }
+        }.execute();
+    }
+
+    public void sendVoiceConfirm(final String sender, final String receiver) {
         new AsyncTask<Void,Void,Boolean>() {
             @Override
             protected Boolean doInBackground(Void... params) {
@@ -333,8 +371,8 @@ public class WearActivity extends WearableActivity implements
                             .toString();
                     JSONObject json = new JSONObject();
                     json.put("timestamp", timestamp);
-                    json.put("receiver", null);
-                    json.put("sender", null);
+                    json.put("receiver", receiver);
+                    json.put("sender", sender);
                     byte[] data = json.toString().getBytes(IOUtils.UTF8);
                     MessageApi.SendMessageResult messageResult = Wearable.MessageApi
                             .sendMessage(mGoogleApiClient, nodeId, post, data).await();
@@ -378,14 +416,12 @@ public class WearActivity extends WearableActivity implements
             return;
         if ("upstars".equals(menu.entity.data)) {
             nav = new SiteNavigator(this);
-            model = UpStarsSectionsModel.get();
             mTitleView.setText("UpStars");
             getRsvpFragment().load(null, false);
             nav.doHello();
         }
         else if ("peekaboo".equals(menu.entity.data)) {
             nav = new ChatNavigator(this);
-            model = ChatSectionsModel.get();
             mTitleView.setText("Peekaboo");
             getRsvpFragment().load(null, false);
             nav.doHello();
@@ -396,11 +432,12 @@ public class WearActivity extends WearableActivity implements
         }
         else if ("chat".equals(menu.entity.data)) {
             String id = menu.entity.val("room");
-            SSect chat = ChatSectionsModel.get().setChatRoom(id);
-            if (chat != null) {
-                mTitleView.setText(chat.title.data);
-                chatServerCmd(new Action("list-messages").add("id", id), null, null);
-                getRsvpFragment().load_to_child(chat, chat.children.length, false);
+            if (nav instanceof ChatNavigator) {
+                SSect chat = ((ChatNavigator)nav).doEnterToRoom(id);
+                if (chat != null) {
+                    mTitleView.setText(chat.title.data);
+                    getRsvpFragment().load_to_child(chat, chat.children.length, false);
+                }
             }
         }
     }
@@ -423,35 +460,30 @@ public class WearActivity extends WearableActivity implements
 
     @Override
     public void enterToRoom(SSect sect) {
-        UpStarsSectionsModel.get().enterRoom(sect);
         getRsvpFragment().load(sect, true);
     }
 
     @Override
     public void returnToRoom(SSect sect) {
-        UpStarsSectionsModel.get().enterRoom(sect);
         getRsvpFragment().load(sect, true);
     }
 
     @Override
     public void showWhereAmIData(SSect sect) {
-        UpStarsSectionsModel.get().enterRoom(sect);
         getRsvpFragment().load(sect, true);
     }
 
+    @Override
+    public boolean isStory() {
+        return true;
+    }
+
     public void attachToSite(SSect menu) {
-        model = UpStarsSectionsModel.get();
         ((SiteNavigator)nav).executeAction(new Action("home"));
     }
 
-    public void attachToChat(JSONObject jobj) {
-        model = ChatSectionsModel.get();
-        ChatSectionsModel.get().setAttachInfo(jobj);
-        nav.doShowMenu();
-    }
-
     @Override
-    public void chatServerCmd(Action action, ChatNavigator nav, final SrvCallback callback) {
+    public void chatServerCmd(Action action, String data, ChatNavigator nav, final SrvCallback callback) {
         Uri.Builder uri = new Uri.Builder().path(IOUtils.CHAT_ACTION_PATH+action.getAction());
         if (action.params != null) {
             for (Map.Entry<String, String> e : action.params.entrySet()) {
@@ -461,11 +493,12 @@ public class WearActivity extends WearableActivity implements
                     uri.appendQueryParameter(e.getKey(), "");
             }
         }
-        String reqData = "";
+        if (data == null)
+            data = "";
         String nodeId = pickBestNodeId();
         if (nodeId != null) {
             PendingResult<MessageApi.SendMessageResult> result = Wearable.MessageApi.sendMessage(
-                    mGoogleApiClient, nodeId, uri.toString(), reqData.getBytes(IOUtils.UTF8));
+                    mGoogleApiClient, nodeId, uri.toString(), data.getBytes(IOUtils.UTF8));
             if (callback != null)
                 result.setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
                         @Override

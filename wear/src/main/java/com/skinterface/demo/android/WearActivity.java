@@ -55,6 +55,12 @@ public class WearActivity extends WearableActivity implements
     static final int SPEECH_REQUEST_CODE    = 1001;
     static final int AUDIO_REQUEST_CODE     = 1002;
 
+    static final int FN1_EDIT   = RsvpFragment.FN1_EDIT;
+    static final int FN1_SEND   = RsvpFragment.FN1_SEND;
+    static final int FN2_RETURN = RsvpFragment.FN2_RETURN;
+    static final int FN2_CANCEL = RsvpFragment.FN2_CANCEL;
+
+
     final Handler handler = new Handler(Looper.getMainLooper());
 
     private ViewGroup mContainerView;
@@ -159,7 +165,7 @@ public class WearActivity extends WearableActivity implements
             return;
         RsvpFragment fr = getRsvpFragment();
         if (fr != null)
-            fr.load(sect, true);
+            fr.load(sect, 0, true);
     }
     public void stopCurrentSect() {
         RsvpFragment fr = getRsvpFragment();
@@ -417,13 +423,13 @@ public class WearActivity extends WearableActivity implements
         if ("upstars".equals(menu.entity.data)) {
             nav = new SiteNavigator(this);
             mTitleView.setText("UpStars");
-            getRsvpFragment().load(null, false);
+            getRsvpFragment().load(null, 0, false);
             nav.doHello();
         }
         else if ("peekaboo".equals(menu.entity.data)) {
             nav = new ChatNavigator(this);
             mTitleView.setText("Peekaboo");
-            getRsvpFragment().load(null, false);
+            getRsvpFragment().load(null, 0, false);
             nav.doHello();
         }
         else if ("show".equals(menu.entity.data)) {
@@ -436,7 +442,8 @@ public class WearActivity extends WearableActivity implements
                 SSect chat = ((ChatNavigator)nav).doEnterToRoom(id);
                 if (chat != null) {
                     mTitleView.setText(chat.title.data);
-                    getRsvpFragment().load_to_child(chat, chat.children.length, false);
+                    getRsvpFragment().load(chat, FN1_EDIT, false);
+                    getRsvpFragment().toChild(chat.children.length, false);
                 }
             }
         }
@@ -460,17 +467,17 @@ public class WearActivity extends WearableActivity implements
 
     @Override
     public void enterToRoom(SSect sect) {
-        getRsvpFragment().load(sect, true);
+        getRsvpFragment().load(sect, 0, true);
     }
 
     @Override
     public void returnToRoom(SSect sect) {
-        getRsvpFragment().load(sect, true);
+        getRsvpFragment().load(sect, 0, true);
     }
 
     @Override
     public void showWhereAmIData(SSect sect) {
-        getRsvpFragment().load(sect, true);
+        getRsvpFragment().load(sect, 0, true);
     }
 
     @Override
@@ -513,20 +520,20 @@ public class WearActivity extends WearableActivity implements
     @Override
     public void siteServerCmd(Action action, SiteNavigator nav, final SrvCallback callback) {
         final  String reqData = action.serializeToCmd(nav.sessionID, 0).toString();
-        String nodeId = pickBestNodeId();
-        if (nodeId != null) {
-            PendingResult<MessageApi.SendMessageResult> result = Wearable.MessageApi.sendMessage(
-                    mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, reqData.getBytes(IOUtils.UTF8));
-            if (callback != null)
-                result.setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
-                        @Override
-                        public void onResult(@NonNull MessageApi.SendMessageResult sendMessageResult) {
-                            if (sendMessageResult.getStatus().isSuccess())
-                                RsvpMessageService.addPendingRequest(sendMessageResult.getRequestId(), callback);
-                        }
-                    });
-        }
-        else
+//        String nodeId = pickBestNodeId();
+//        if (nodeId != null) {
+//            PendingResult<MessageApi.SendMessageResult> result = Wearable.MessageApi.sendMessage(
+//                    mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, reqData.getBytes(IOUtils.UTF8));
+//            if (callback != null)
+//                result.setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+//                        @Override
+//                        public void onResult(@NonNull MessageApi.SendMessageResult sendMessageResult) {
+//                            if (sendMessageResult.getStatus().isSuccess())
+//                                RsvpMessageService.addPendingRequest(sendMessageResult.getRequestId(), callback);
+//                        }
+//                    });
+//        }
+//        else
         {
             new AsyncTask<Void, Void, String>() {
                 @Override

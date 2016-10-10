@@ -30,10 +30,17 @@ public class RsvpFragment extends Fragment implements
 {
     private static final int STATE_INIT    = 0;
     private static final int STATE_DONE    = 1;
-    private static final int STATE_COMPOSE = 2;
     private static final int STATE_TITLE   = 3;
     private static final int STATE_ARTICLE = 4;
     private static final int STATE_CHILD   = 5;
+
+    public static final int FN1_MASK   = 0xF;
+    public static final int FN1_EDIT   = 0x1;
+    public static final int FN1_SEND   = 0x2;
+
+    public static final int FN2_MASK   = 0xF0;
+    public static final int FN2_RETURN = 0x10;
+    public static final int FN2_CANCEL = 0x20;
 
     private static final int[] TICS = {
             50, //calcTic(200),
@@ -77,7 +84,7 @@ public class RsvpFragment extends Fragment implements
     SSect sect;
     RsvpWords words;
     int state;
-
+    int flags;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle saved) {
@@ -118,35 +125,73 @@ public class RsvpFragment extends Fragment implements
             mRsvpView.stop(null);
     }
 
-    public void load(SSect sect, boolean play) {
+    public void load(SSect sect, int flags, boolean play) {
         if (this.sect == sect)
             return;
         this.sect = sect;
         this.words = null;
-        if (sect != null &&
-                "chat-text-msg".equals(sect.entity.media) &&
-                "composing".equals(sect.entity.role))
-        {
-            this.state = STATE_COMPOSE;
+        this.flags = flags;
+        switch ( (flags & FN1_MASK) ) {
+        case FN1_EDIT:
+            mRecordButton.setImageResource(R.drawable.ic_record);
+            mRecordButton.setVisibility(View.VISIBLE);
+            break;
+        case FN1_SEND:
+            mRecordButton.setImageResource(R.drawable.ic_send);
+            mRecordButton.setVisibility(View.VISIBLE);
+            break;
+        case 0:
+        default:
+            mRecordButton.setVisibility(View.INVISIBLE);
+            break;
+        }
+        switch ( (flags & FN2_MASK) ) {
+        case FN2_RETURN:
+            mPrevButton.setImageResource(R.drawable.ic_return);
+            mPrevButton.setVisibility(View.VISIBLE);
+            break;
+        case FN2_CANCEL:
             mPrevButton.setImageResource(R.drawable.ic_close);
             mPrevButton.setVisibility(View.VISIBLE);
-            mRecordButton.setImageResource(R.drawable.ic_send);
-        } else {
-            if (this.state == STATE_COMPOSE) {
-                mPrevButton.setImageResource(R.drawable.ic_close);
-                mPrevButton.setVisibility(View.INVISIBLE);
-                mRecordButton.setImageResource(R.drawable.ic_record);
-            }
-            this.state = STATE_INIT;
+            break;
+        case 0:
+        default:
+            mPrevButton.setVisibility(View.INVISIBLE);
+            break;
         }
+        if (sect == null) {
+            mNextButton.setVisibility(View.INVISIBLE);
+        } else {
+            mNextButton.setVisibility(View.VISIBLE);
+        }
+        this.state = STATE_INIT;
+//        if (sect != null &&
+//                "chat-text-msg".equals(sect.entity.media) &&
+//                "composing".equals(sect.entity.role))
+//        {
+//            this.state = STATE_COMPOSE;
+//            mPrevButton.setImageResource(R.drawable.ic_close);
+//            mPrevButton.setVisibility(View.VISIBLE);
+//            mRecordButton.setImageResource(R.drawable.ic_send);
+//        } else {
+//            if (this.state == STATE_COMPOSE) {
+//                mPrevButton.setImageResource(R.drawable.ic_close);
+//                mPrevButton.setVisibility(View.INVISIBLE);
+//                mRecordButton.setImageResource(R.drawable.ic_record);
+//            }
+//            this.state = STATE_INIT;
+//        }
         onNext(play);
     }
 
-    public void load_to_child(SSect sect, int idx, boolean play) {
+    public boolean toChild(int idx, boolean play) {
+        if (sect == null || sect.children == null)
+            return false;
+        if (idx < 0) idx = 0;
+        if (idx > sect.children.length) idx = sect.children.length;
         this.state = STATE_CHILD + idx;
-        this.sect = sect;
-        this.words = null;
         onRepeat(play);
+        return true;
     }
 
     public void stop() {
@@ -224,12 +269,6 @@ public class RsvpFragment extends Fragment implements
             mPositionView.setText(getSpeedString());
             return;
         }
-        if (state == STATE_COMPOSE) {
-            words = new RsvpWords();
-            words.addTitleWords(sect.title);
-            mRsvpView.load(words, play);
-            return;
-        }
         if (state == STATE_INIT || state == STATE_DONE) {
             mRsvpView.stop(null);
             mRsvpView.load(words, play);
@@ -275,12 +314,6 @@ public class RsvpFragment extends Fragment implements
         }
         if (play && mRsvpView.isPaused()) {
             mRsvpView.resume();
-            return;
-        }
-        if (state == STATE_COMPOSE) {
-            words = new RsvpWords();
-            words.addTitleWords(sect.title);
-            mRsvpView.load(words, play);
             return;
         }
         if (state == STATE_INIT || state == STATE_DONE) {
@@ -341,12 +374,6 @@ public class RsvpFragment extends Fragment implements
             return;
         }
 
-        if (state == STATE_COMPOSE) {
-            words = new RsvpWords();
-            words.addTitleWords(sect.title);
-            mRsvpView.load(words, false);
-            return;
-        }
         if (state > STATE_CHILD) {
             int pos = state - STATE_CHILD - 1;
             if (pos >= sect.children.length)
@@ -383,28 +410,34 @@ public class RsvpFragment extends Fragment implements
 
     @Override
     public void onClick(View v) {
-        if (state == STATE_COMPOSE) {
-            if (v.getId() == R.id.record)
-                ((WearActivity) getActivity()).composeNewChatMessageResult(true); // send
-            else if (v.getId() == R.id.next)
-                onNext(true);
-            else if (v.getId() == R.id.prev)
-                ((WearActivity) getActivity()).composeNewChatMessageResult(false); // cancel
-        } else {
-            if (v.getId() == R.id.record)
+        if (v.getId() == R.id.record) {
+            if ( (flags & FN1_MASK) == FN1_EDIT ) {
                 ((WearActivity) getActivity()).startVoiceRecognition();
-            else if (v.getId() == R.id.next)
-                onNext(true);
-            else if (v.getId() == R.id.prev)
+            }
+            else if ( (flags & FN1_MASK) == FN1_SEND ) {
+                ((WearActivity) getActivity()).composeNewChatMessageResult(true); // send
+            }
+        }
+        if (v.getId() == R.id.prev) {
+            if ( (flags & FN2_MASK) == FN2_RETURN ) {
                 onPrev();
+            }
+            else if ( (flags & FN2_MASK) == FN2_CANCEL ) {
+                ((WearActivity) getActivity()).composeNewChatMessageResult(false); // cancel
+            }
+        }
+        if (v.getId() == R.id.next) {
+            onNext(true);
         }
     }
 
     @Override
     public boolean onLongClick(View v) {
         if (v.getId() == R.id.record) {
-            ((WearActivity) getActivity()).startVoiceRecording();
-            return true;
+            if ( (flags & FN1_MASK) == FN1_EDIT ) {
+                ((WearActivity) getActivity()).startVoiceRecording();
+                return true;
+            }
         }
         return false;
     }

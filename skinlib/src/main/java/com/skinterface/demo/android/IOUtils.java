@@ -22,7 +22,8 @@ public class IOUtils {
     public static final String CHAT_REPLAY_PATH  = "/chat/replay/";
     public static final String CHAT_POST_PATH    = "/chat/post";
 
-    static final String UpStars_JSON_URL = "http://u-com.pro/UpStars/Service";
+    static final String UpStars_Base_URL = "http://u-com.pro/UpStars/";
+    static final String UpStars_JSON_URL = UpStars_Base_URL + "Service";
     //static final String UpStars_JSON_URL = "http://192.168.2.157:8080/UpStars/Service";
 
     public final static Charset UTF8 = Charset.forName("UTF-8");

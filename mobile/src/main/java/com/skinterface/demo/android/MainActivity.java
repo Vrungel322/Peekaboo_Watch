@@ -6,7 +6,12 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.Matrix;
 import android.graphics.Typeface;
+import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.Environment;
@@ -26,6 +31,7 @@ import android.support.v7.widget.RecyclerView;
 import android.support.v7.widget.Toolbar;
 import android.text.Spannable;
 import android.text.SpannableStringBuilder;
+import android.text.TextUtils;
 import android.text.style.RelativeSizeSpan;
 import android.text.style.StyleSpan;
 import android.util.Log;
@@ -36,6 +42,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ArrayAdapter;
 import android.widget.ImageButton;
+import android.widget.ImageView;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
@@ -432,13 +439,14 @@ public class MainActivity extends AppCompatActivity implements
                     conn.setConnectTimeout(5000);
                     conn.setRequestMethod("POST");
                     conn.setDoInput(true);
+                    Log.i(TAG, "Server request is: " + reqData);
                     OutputStream os = conn.getOutputStream();
                     os.write(reqData.getBytes(IOUtils.UTF8));
                     os.close();
                     // Starts the query
                     conn.connect();
                     int response = conn.getResponseCode();
-                    Log.d(TAG, "The response is: " + conn.getResponseMessage());
+                    Log.i(TAG, "Server response is: " + response + " " + conn.getResponseMessage());
                     if (response == 200) {
                         StringBuilder sb = new StringBuilder();
                         is = conn.getInputStream();
@@ -449,6 +457,7 @@ public class MainActivity extends AppCompatActivity implements
                             sb.append(buffer, 0, sz);
                         reader.close();
                         final String result = sb.toString();
+                        Log.i(TAG, "Server replay data: " + result);
                         handler.post(new Runnable() {
                             @Override
                             public void run() {
@@ -530,7 +539,7 @@ public class MainActivity extends AppCompatActivity implements
             int end = beg + text.length();
             sb.append(text);
             if (part.type == RsvpWords.JR_TITLE) {
-                sb.setSpan(new RelativeSizeSpan(1.5f), beg, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+                sb.setSpan(new RelativeSizeSpan(1.2f), beg, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
                 sb.setSpan(new StyleSpan(Typeface.BOLD), beg, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
             else if (part.type == RsvpWords.JR_INTRO) {
@@ -715,12 +724,16 @@ public class MainActivity extends AppCompatActivity implements
             // each data item is just a string in this case
             public TextView tvTitle;
             public TextView tvIntro;
+            public ImageView ivImage;
+            public Bitmap bitmap;
+            public String imageUrl;
             public Action action;
             public EdtValue editor;
             public ViewHolder(View v) {
                 super(v);
                 tvTitle = (TextView) v.findViewById(R.id.tv_title);
                 tvIntro = (TextView) v.findViewById(R.id.tv_intro);
+                ivImage = (ImageView) v.findViewById(R.id.iv_image);
             }
 
             @Override
@@ -728,6 +741,62 @@ public class MainActivity extends AppCompatActivity implements
                 if (action != null) {
                     mSect.currListPosition = getAdapterPosition();
                     nav.executeAction(action);
+                }
+            }
+        }
+
+        class DownloadAsyncTask extends AsyncTask<Void, Void, Void> {
+            final String imageURL;
+            final ViewHolder holder;
+            Bitmap bitmap;
+
+            public DownloadAsyncTask(String imageURL, ViewHolder holder) {
+                this.imageURL = imageURL;
+                this.holder = holder;
+            }
+
+            @Override
+            protected Void doInBackground(Void... params) {
+                //load image directly
+                try {
+                    Uri uri = Uri.parse(IOUtils.UpStars_Base_URL);
+                    Uri.Builder builder = uri.buildUpon();
+                    builder.path(uri.getPath() + imageURL);
+                    uri = builder.build();
+                    URL url = new URL(uri.toString());
+                    bitmap = BitmapFactory.decodeStream(url.openStream());
+                } catch (IOException e) {
+                    Log.e(TAG, "Downloading image failed", e);
+                }
+                return null;
+            }
+
+            @Override
+            protected void onPostExecute(Void result) {
+                if (bitmap == null) {
+                    holder.ivImage.setImageResource(0);
+                    holder.ivImage.setVisibility(View.GONE);
+                } else {
+                    int bmW = bitmap.getWidth();
+                    int bmH = bitmap.getHeight();
+                    if (bmW <= 0) bmW = 1;
+                    int imW = holder.ivImage.getWidth();
+                    int imH = imW * bmH / bmW;
+                    holder.ivImage.setImageBitmap(bitmap);
+                    holder.ivImage.setVisibility(View.VISIBLE);
+                    ViewGroup.LayoutParams layoutParams = holder.ivImage.getLayoutParams();
+                    layoutParams.width = imW;
+                    layoutParams.height = imH;
+                    holder.ivImage.setLayoutParams(layoutParams);
+                    float scale = ((float)imW) / bmW;
+                    Matrix m = new Matrix();
+                    m.setScale(scale, scale);
+                    holder.ivImage.setImageMatrix(m);
+                    holder.ivImage.setScaleType(ImageView.ScaleType.MATRIX);
+                    holder.ivImage.requestLayout();
+                    holder.ivImage.invalidate();
+                    if (TextUtils.isEmpty(holder.tvTitle.getText()))
+                        holder.tvTitle.setVisibility(View.GONE);
                 }
             }
         }
@@ -752,12 +821,19 @@ public class MainActivity extends AppCompatActivity implements
         public void onBindViewHolder(ViewHolder holder, int position) {
             CharSequence title = "";
             CharSequence descr = null;
+            String image = null;
             if (position >= 0 && position < mSect.children.length) {
                 SSect sect = mSect.children[position];
-                if (sect.title != null)
+                if (sect.title != null) {
                     title = Fmt.toSpannedText(sect.title.data);
-                if (sect.descr != null)
+                    if (sect.title.val("image") != null)
+                        image = sect.title.val("image");
+                }
+                if (sect.descr != null) {
                     descr = Fmt.toSpannedText(sect.descr.data);
+                    if (image == null && sect.descr.val("image") != null)
+                        image = sect.descr.val("image");
+                }
                 if (sect.isAction) {
                     holder.action = Action.create(sect.entity.data);
                     if (sect.entity.props != null) {
@@ -767,9 +843,9 @@ public class MainActivity extends AppCompatActivity implements
                 }
                 else if (sect.hasArticle || sect.hasChildren || sect.children != null)
                     holder.action = new Action("enter").add("sectID", sect.guid).add("position", position);
-                if (sect.isValue) {
+
+                if (sect.isValue)
                     holder.editor = new EdtValue(sect, nav, MainActivity.this);
-                }
             }
             holder.tvTitle.setText(title);
             if (holder.action != null) {
@@ -782,6 +858,12 @@ public class MainActivity extends AppCompatActivity implements
             } else {
                 holder.tvIntro.setText(descr);
                 holder.tvIntro.setVisibility(View.VISIBLE);
+            }
+            if (image == null) {
+                holder.ivImage.setImageResource(0);
+                holder.ivImage.setVisibility(View.GONE);
+            } else {
+                new DownloadAsyncTask(image, holder).execute();
             }
             if (holder.editor != null)
                 ((ViewGroup)holder.tvIntro.getParent()).addView(holder.editor.makeWidget(false));

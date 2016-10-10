@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.UUID;
 
 public class ChatNavigator implements Navigator {
 
@@ -31,8 +32,8 @@ public class ChatNavigator implements Navigator {
 
     interface SrvClient {
         void showMenu(SSect menu);
-        void enterToRoom(SSect sect);
-        void returnToRoom(SSect sect);
+        void enterToRoom(SSect sect, int flags);
+        void returnToRoom(SSect sect, int flags);
         void sendChatConfirm(final String sender, final String receiver, final String text);
         void sendVoiceConfirm(final String sender, final String receiver);
         void chatServerCmd(Action action, String data, ChatNavigator nav, SrvCallback callback);
@@ -97,7 +98,7 @@ public class ChatNavigator implements Navigator {
                 wholeMenuTree = SSect.makeMenu("Peekaboo");
                 try {
                     JSONObject jobj = (JSONObject) obj;
-                    userID = jobj.getString("id");
+                    userID = jobj.getString("id").intern();
                     userName = jobj.getString("name");
                     ArrayList<SSect> children = new ArrayList<>();
                     JSONArray jarr = jobj.getJSONArray("contacts");
@@ -128,14 +129,14 @@ public class ChatNavigator implements Navigator {
     public SSect doEnterToRoom(String partnerId) {
         chat_room = chatRooms.get(partnerId);
         currentData = chat_room;
+        client.enterToRoom(chat_room, FLAG_CAN_EDIT|FLAG_CHAT);
         client.chatServerCmd(new Action("list-messages").add("id", partnerId), null, null, null);
-        client.enterToRoom(chat_room);
         return chat_room;
     }
 
     public void doReturn() {
         currentData = chat_room;
-        client.returnToRoom(currentData);
+        client.returnToRoom(currentData, FLAG_CAN_EDIT|FLAG_CHAT);
     }
 
     private void makeChatRoom(String partenrId, String userName) {
@@ -145,7 +146,7 @@ public class ChatNavigator implements Navigator {
         partenrId = partenrId.intern();
         chat = new SSect();
         chat.entity.media = "chat-room";
-        chat.entity.name = partenrId;
+        chat.entity.name = partenrId.intern();
         chat.entity.data = "chat";
         chat.title = new SEntity();
         chat.title.media = "text";
@@ -167,7 +168,7 @@ public class ChatNavigator implements Navigator {
         msg.padd("sender", userID);
         msg.padd("receiver", chat_room.entity.name);
         currentData = msg;
-        client.enterToRoom(msg);
+        client.enterToRoom(msg, FLAG_CAN_SEND|FLAG_CAN_ABORT);
     }
 
     public void composeNewChatMessageResult(boolean confirmed) {
@@ -182,14 +183,14 @@ public class ChatNavigator implements Navigator {
         doReturn();
     }
 
-    public static void mergeChatMessage(JSONObject jmsg) {
+    public static SSect mergeChatMessage(JSONObject jmsg) {
         boolean own = jmsg.optBoolean("own");
         String partner = own ? jmsg.optString("receiver") : jmsg.optString("sender");;
         if (partner == null || partner.isEmpty())
-            return;
+            return null;
         SSect chat = chatRooms.get(partner);
         if (chat == null)
-            return;
+            return null;
 
         long id = jmsg.optLong("id");
         long timestamp = jmsg.optLong("timestamp");
@@ -213,7 +214,8 @@ public class ChatNavigator implements Navigator {
             msg = new SSect();
             msg.entity.media = "chat-text-msg";
             msg.entity.role = own ? "send" : "recv";
-            msg.entity.name = status;
+            msg.entity.name = (status == null) ? null : status.intern();
+            msg.guid = UUID.randomUUID().toString();
             msg.title = new SEntity();
             msg.title.media = "text";
             msg.title.data = text;
@@ -234,10 +236,11 @@ public class ChatNavigator implements Navigator {
             });
             chat.children = arr;
         } else {
-            msg.entity.name = status;
+            msg.entity.name = (status == null) ? null : status.intern();
             if (text != null && !text.isEmpty())
                 msg.title.data = text;
         }
+        return msg;
     }
 
 }

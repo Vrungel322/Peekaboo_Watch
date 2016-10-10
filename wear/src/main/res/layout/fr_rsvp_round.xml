@@ -22,6 +22,18 @@
         android:layout_alignParentTop="true"
         android:layout_gravity="top|fill_horizontal"
         />
+    
+    <ImageView
+        android:id="@+id/chat_message_status"
+        android:layout_width="22px"
+        android:layout_height="22px"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentRight="true"
+        android:layout_marginTop="242px"
+        android:layout_marginRight="22px"
+        android:src="@drawable/ic_not_sent_error"
+        android:visibility="gone"
+        />
 
     <android.support.wearable.view.CircularButton
         android:id="@+id/record"

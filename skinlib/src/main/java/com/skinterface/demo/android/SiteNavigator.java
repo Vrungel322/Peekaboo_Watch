@@ -40,9 +40,9 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
         boolean isStory();
         ActionHandler makeActionHandler(SiteNavigator nav, Action action);
         void attachToSite(SSect menu);
-        void enterToRoom(SSect sect);
-        void returnToRoom(SSect sect);
-        void showWhereAmIData(SSect sect);
+        void enterToRoom(SSect sect, int flags);
+        void returnToRoom(SSect sect, int flags);
+        void showWhereAmIData(SSect sect, int flags);
         void showMenu(SSect menu);
         void siteServerCmd(Action action, SiteNavigator nav, SrvCallback callback);
     }
@@ -128,11 +128,9 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
             ds = new SSect();
             ds.title = new SEntity();
         }
-        if (ds.children != null && ds.children.length == 0)
-            ds.children = null;
         ds.currListPosition = -1;
         currentData = ds;
-        client.enterToRoom(ds);
+        client.enterToRoom(ds, 0);
     }
 
     private void returnToRoom(SSect ds) {
@@ -141,7 +139,7 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
             ds.title = new SEntity();
         }
         currentData = ds;
-        client.returnToRoom(ds);
+        client.returnToRoom(ds, 0);
     }
 
     public void doShowMenu() {
@@ -184,7 +182,7 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
                 nav.doEnterToRoom(nav.currentData);
             }
             else if ("where".equals(act)) {
-                client.showWhereAmIData(nav.currentData);
+                client.showWhereAmIData(nav.currentData, 0);
             }
             else if ("action".equals(act)) {
                 if (nav.currentData.isAction) {

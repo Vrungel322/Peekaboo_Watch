@@ -18,6 +18,7 @@ import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.TextView;
 
 import static com.skinterface.demo.android.WearActivity.TAG;
@@ -41,6 +42,10 @@ public class RsvpFragment extends Fragment implements
     public static final int FN2_MASK   = 0xF0;
     public static final int FN2_RETURN = 0x10;
     public static final int FN2_CANCEL = 0x20;
+
+    public static final int IS_CHAT    = 0x100000;
+
+    private static final String CHILD_POS_END  = new String("end");
 
     private static final int[] TICS = {
             50, //calcTic(200),
@@ -80,11 +85,13 @@ public class RsvpFragment extends Fragment implements
     TextView mPositionView;
     TextView mPrevText;
     TextView mNextText;
+    ImageView mChatMessageStatusView;
 
     SSect sect;
     RsvpWords words;
     int state;
     int flags;
+    String cguid;
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle saved) {
@@ -98,6 +105,7 @@ public class RsvpFragment extends Fragment implements
         mPositionView = (TextView) view.findViewById(R.id.position);
         mPrevText = (TextView) view.findViewById(R.id.prev_text);
         mNextText = (TextView) view.findViewById(R.id.next_text);
+        mChatMessageStatusView = (ImageView) view.findViewById(R.id.chat_message_status);
 
         mPrevButton.setOnClickListener(this);
         mNextButton.setOnClickListener(this);
@@ -164,23 +172,13 @@ public class RsvpFragment extends Fragment implements
         } else {
             mNextButton.setVisibility(View.VISIBLE);
         }
-        this.state = STATE_INIT;
-//        if (sect != null &&
-//                "chat-text-msg".equals(sect.entity.media) &&
-//                "composing".equals(sect.entity.role))
-//        {
-//            this.state = STATE_COMPOSE;
-//            mPrevButton.setImageResource(R.drawable.ic_close);
-//            mPrevButton.setVisibility(View.VISIBLE);
-//            mRecordButton.setImageResource(R.drawable.ic_send);
-//        } else {
-//            if (this.state == STATE_COMPOSE) {
-//                mPrevButton.setImageResource(R.drawable.ic_close);
-//                mPrevButton.setVisibility(View.INVISIBLE);
-//                mRecordButton.setImageResource(R.drawable.ic_record);
-//            }
-//            this.state = STATE_INIT;
-//        }
+        if ((flags & IS_CHAT) != 0 && sect != null) {
+            this.state = STATE_CHILD + sect.currListPosition;
+            this.cguid = CHILD_POS_END;
+        } else {
+            this.state = STATE_INIT;
+            this.cguid = null;
+        }
         onNext(play);
     }
 
@@ -189,13 +187,35 @@ public class RsvpFragment extends Fragment implements
             return false;
         if (idx < 0) idx = 0;
         if (idx > sect.children.length) idx = sect.children.length;
+        sect.currListPosition = idx;
         this.state = STATE_CHILD + idx;
+        if (idx >= sect.children.length)
+            this.cguid = CHILD_POS_END;
+        else
+            this.cguid = sect.children[idx].guid;
         onRepeat(play);
         return true;
     }
 
+    public void update() {
+        if (cguid != null) {
+            if (cguid == CHILD_POS_END) {
+                sect.currListPosition = sect.children.length;
+                state = STATE_CHILD + sect.children.length;
+            } else {
+                for (int pos = 0; pos < sect.children.length; ++pos) {
+                    if (cguid == sect.children[pos].guid) {
+                        sect.currListPosition = pos;
+                        state = STATE_CHILD + pos;
+                        break;
+                    }
+                }
+            }
+            updatePosView(false);
+        }
+    }
+
     public void stop() {
-        this.state = STATE_DONE;
         this.words = null;
         if (mRsvpView != null)
             mRsvpView.stop(null);
@@ -210,7 +230,36 @@ public class RsvpFragment extends Fragment implements
             mPositionView.setText(getSpeedString());
             mPrevText.setText("");
             mNextText.setText("");
+            mChatMessageStatusView.setImageResource(0);
+            mChatMessageStatusView.setVisibility(View.INVISIBLE);
             return;
+        }
+        if ((flags & IS_CHAT) != 0) {
+            String status = null;
+            if (sect != null && sect.children != null) {
+                int pos = state - STATE_CHILD;
+                if (pos >= 0 && pos < sect.children.length)
+                    status = sect.children[pos].entity.name;
+            }
+            if (status == "sent") {
+                mChatMessageStatusView.setImageResource(R.drawable.ic_sending);
+                mChatMessageStatusView.setVisibility(View.VISIBLE);
+            }
+            else if (status == "delivered") {
+                mChatMessageStatusView.setImageResource(R.drawable.ic_sent_unread);
+                mChatMessageStatusView.setVisibility(View.VISIBLE);
+            }
+            else if (status == "read") {
+                mChatMessageStatusView.setImageResource(R.drawable.ic_sent_read);
+                mChatMessageStatusView.setVisibility(View.VISIBLE);
+            }
+            else {
+                mChatMessageStatusView.setImageResource(0);
+                mChatMessageStatusView.setVisibility(View.INVISIBLE);
+            }
+        } else {
+            mChatMessageStatusView.setImageResource(0);
+            mChatMessageStatusView.setVisibility(View.INVISIBLE);
         }
         SpannableStringBuilder sb = new SpannableStringBuilder();
         sb.append("*T*");
@@ -265,6 +314,7 @@ public class RsvpFragment extends Fragment implements
             return;
         if (sect == null) {
             state = STATE_DONE;
+            cguid = null;
             mRsvpView.stop(null);
             mPositionView.setText(getSpeedString());
             return;
@@ -277,7 +327,8 @@ public class RsvpFragment extends Fragment implements
         if (state == STATE_TITLE) {
             words = new RsvpWords();
             words.addTitleWords(sect.title);
-            words.addIntroWords(sect.descr);
+            if (sect.descr != null)
+                words.addIntroWords(sect.descr);
             mRsvpView.load(words, play);
             return;
         }
@@ -296,7 +347,8 @@ public class RsvpFragment extends Fragment implements
                 SSect child = sect.children[pos];
                 words = new RsvpWords();
                 words.addTitleWords(child.title);
-                words.addIntroWords(child.descr);
+                if (child.descr != null)
+                    words.addIntroWords(child.descr);
                 mRsvpView.load(words, play);
             }
             return;
@@ -308,6 +360,7 @@ public class RsvpFragment extends Fragment implements
             return;
         if (sect == null) {
             state = STATE_DONE;
+            cguid = null;
             mRsvpView.stop(null);
             mPositionView.setText(getSpeedString());
             return;
@@ -319,15 +372,18 @@ public class RsvpFragment extends Fragment implements
         if (state == STATE_INIT || state == STATE_DONE) {
             // show title & description
             state = STATE_TITLE;
+            cguid = null;
             words = new RsvpWords();
             words.addTitleWords(sect.title);
-            words.addIntroWords(sect.descr);
+            if (sect.descr != null)
+                words.addIntroWords(sect.descr);
             mRsvpView.load(words, play);
             return;
         }
         if (state == STATE_TITLE) {
             // show article if any
             state = STATE_ARTICLE;
+            cguid = null;
             if (sect.hasArticle) {
                 words = new RsvpWords();
                 words.addArticleWords(sect.entity);
@@ -338,30 +394,46 @@ public class RsvpFragment extends Fragment implements
         if (state == STATE_ARTICLE) {
             // show children if any
             if (sect.children != null && sect.children.length > 0) {
+                sect.currListPosition = 0;
                 state = STATE_CHILD;
                 SSect child = sect.children[0];
+                cguid = child.guid;
                 words = new RsvpWords();
                 words.addTitleWords(child.title);
-                words.addIntroWords(child.descr);
+                if (child.descr != null)
+                    words.addIntroWords(child.descr);
                 mRsvpView.load(words, play);
                 return;
-            } else {
+            }
+            else if ( (flags & IS_CHAT) != 0 ) {
+                sect.currListPosition = 0;
+                state = STATE_CHILD;
+                cguid = CHILD_POS_END;
+            }
+            else {
                 state = STATE_DONE;
+                cguid = null;
             }
         }
         if (state >= STATE_CHILD) {
             int pos = state - STATE_CHILD + 1;
             if (pos < sect.children.length) {
+                sect.currListPosition = pos;
                 state = STATE_CHILD + pos;
                 SSect child = sect.children[pos];
+                cguid = child.guid;
                 words = new RsvpWords();
                 words.addTitleWords(child.title);
-                words.addIntroWords(child.descr);
+                if (child.descr != null)
+                    words.addIntroWords(child.descr);
                 mRsvpView.load(words, play);
+            } else {
+                cguid = CHILD_POS_END;
             }
             return;
         }
         state = STATE_DONE;
+        cguid = null;
     }
 
     private void onPrev() {
@@ -369,36 +441,53 @@ public class RsvpFragment extends Fragment implements
             return;
         if (sect == null) {
             state = STATE_DONE;
+            cguid = null;
             mRsvpView.stop(null);
             mPositionView.setText("");
             return;
         }
 
-        if (state > STATE_CHILD) {
+        if (state >= STATE_CHILD) {
             int pos = state - STATE_CHILD - 1;
             if (pos >= sect.children.length)
                 pos = sect.children.length - 1;
-            if (pos >= 0) {
+            if (pos >= 0 && sect.children.length > 0) {
+                sect.currListPosition = pos;
                 state = STATE_CHILD + pos;
                 SSect child = sect.children[pos];
+                cguid = child.guid;
                 words = new RsvpWords();
                 words.addTitleWords(child.title);
-                words.addIntroWords(child.descr);
+                if (child.descr != null)
+                    words.addIntroWords(child.descr);
                 mRsvpView.load(words, false);
                 return;
             }
-            state = STATE_CHILD;
+            else if ((flags & IS_CHAT) != 0) {
+                sect.currListPosition = 0;
+                state = STATE_CHILD;
+                cguid = null;
+                updatePosView(false);
+                return;
+            } else {
+                sect.currListPosition = 0;
+                state = STATE_CHILD;
+                cguid = null;
+            }
         }
         if (state == STATE_CHILD || state == STATE_ARTICLE) {
             // show title & description
             state = STATE_TITLE;
+            cguid = null;
             words = new RsvpWords();
             words.addTitleWords(sect.title);
-            words.addIntroWords(sect.descr);
+            if (sect.descr != null)
+                words.addIntroWords(sect.descr);
             mRsvpView.load(words, false);
             return;
         }
         state = STATE_INIT;
+        cguid = null;
         mRsvpView.stop(null);
         updatePosView(false);
     }

@@ -159,21 +159,15 @@ public class WearActivity extends WearableActivity implements
         return super.onTouchEvent(event);
     }
 
-    public void playCurrentSect() {
-        SSect sect = nav.currArticle();
-        if (sect == null)
-            return;
-        RsvpFragment fr = getRsvpFragment();
-        if (fr != null)
-            fr.load(sect, 0, true);
-    }
     public void stopCurrentSect() {
         RsvpFragment fr = getRsvpFragment();
         if (fr != null)
             fr.stop();
     }
     public void mergeChatMessage(JSONObject jmsg) {
-        ChatNavigator.mergeChatMessage(jmsg);
+        SSect msg = ChatNavigator.mergeChatMessage(jmsg);
+        if (msg != null)
+            getRsvpFragment().update();
     }
 
     public void composeNewChatMessage(String text) {
@@ -442,8 +436,8 @@ public class WearActivity extends WearableActivity implements
                 SSect chat = ((ChatNavigator)nav).doEnterToRoom(id);
                 if (chat != null) {
                     mTitleView.setText(chat.title.data);
-                    getRsvpFragment().load(chat, FN1_EDIT, false);
-                    getRsvpFragment().toChild(chat.children.length, false);
+                    //getRsvpFragment().load(chat, RsvpFragment.FN1_EDIT|RsvpFragment.IS_CHAT, false);
+                    //getRsvpFragment().toChild(chat.children.length, false);
                 }
             }
         }
@@ -465,19 +459,42 @@ public class WearActivity extends WearableActivity implements
         return new ActionHandler(nav, this, action);
     }
 
-    @Override
-    public void enterToRoom(SSect sect) {
-        getRsvpFragment().load(sect, 0, true);
+    private int flagsNavToRsvp(int nav_flags) {
+        int flags = 0;
+        if ((nav_flags & Navigator.FLAG_CAN_EDIT) != 0)
+            flags |= RsvpFragment.FN1_EDIT;
+        else if ((nav_flags & Navigator.FLAG_CAN_SEND) != 0)
+            flags |= RsvpFragment.FN1_SEND;
+        if ((nav_flags & Navigator.FLAG_CAN_ABORT) != 0)
+            flags |= RsvpFragment.FN2_CANCEL;
+        else if ((nav_flags & Navigator.FLAG_CAN_RETURN) != 0)
+            flags |= RsvpFragment.FN2_RETURN;
+
+        if ((nav_flags & Navigator.FLAG_CHAT) != 0)
+            flags |= RsvpFragment.IS_CHAT;
+        return flags;
     }
 
     @Override
-    public void returnToRoom(SSect sect) {
-        getRsvpFragment().load(sect, 0, true);
+    public void enterToRoom(SSect sect, int flags) {
+        if (nav instanceof ChatNavigator) {
+            getRsvpFragment().load(sect, flagsNavToRsvp(flags), false);
+            if (sect.currListPosition == 0 && sect.children != null && (flags & Navigator.FLAG_CHAT) != 0)
+                getRsvpFragment().toChild(sect.children.length, false);
+        } else {
+            getRsvpFragment().load(sect, flagsNavToRsvp(flags), true);
+        }
     }
 
     @Override
-    public void showWhereAmIData(SSect sect) {
-        getRsvpFragment().load(sect, 0, true);
+    public void returnToRoom(SSect sect, int flags) {
+        getRsvpFragment().load(sect, flagsNavToRsvp(flags), false);
+        getRsvpFragment().toChild(sect.currListPosition, false);
+    }
+
+    @Override
+    public void showWhereAmIData(SSect sect, int flags) {
+        getRsvpFragment().load(sect, flagsNavToRsvp(flags), true);
     }
 
     @Override
@@ -520,20 +537,20 @@ public class WearActivity extends WearableActivity implements
     @Override
     public void siteServerCmd(Action action, SiteNavigator nav, final SrvCallback callback) {
         final  String reqData = action.serializeToCmd(nav.sessionID, 0).toString();
-//        String nodeId = pickBestNodeId();
-//        if (nodeId != null) {
-//            PendingResult<MessageApi.SendMessageResult> result = Wearable.MessageApi.sendMessage(
-//                    mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, reqData.getBytes(IOUtils.UTF8));
-//            if (callback != null)
-//                result.setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
-//                        @Override
-//                        public void onResult(@NonNull MessageApi.SendMessageResult sendMessageResult) {
-//                            if (sendMessageResult.getStatus().isSuccess())
-//                                RsvpMessageService.addPendingRequest(sendMessageResult.getRequestId(), callback);
-//                        }
-//                    });
-//        }
-//        else
+        String nodeId = pickBestNodeId();
+        if (nodeId != null) {
+            PendingResult<MessageApi.SendMessageResult> result = Wearable.MessageApi.sendMessage(
+                    mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, reqData.getBytes(IOUtils.UTF8));
+            if (callback != null)
+                result.setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
+                        @Override
+                        public void onResult(@NonNull MessageApi.SendMessageResult sendMessageResult) {
+                            if (sendMessageResult.getStatus().isSuccess())
+                                RsvpMessageService.addPendingRequest(sendMessageResult.getRequestId(), callback);
+                        }
+                    });
+        }
+        else
         {
             new AsyncTask<Void, Void, String>() {
                 @Override

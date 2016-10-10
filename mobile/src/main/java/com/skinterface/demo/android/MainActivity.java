@@ -589,7 +589,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
-    public void showWhereAmIData(final SSect ds) {
+    public void showWhereAmIData(final SSect ds, int flags) {
         if (ds == null) {
             play(new RsvpWords().addWarning("Place is not known"));
             return;
@@ -612,7 +612,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
-    public void enterToRoom(final SSect ds) {
+    public void enterToRoom(final SSect ds, int flags) {
         justRead = 0;
         if (!introWasShown(ds) && ds.descr == null)
             introSetShown(ds, true);
@@ -651,7 +651,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
-    public void returnToRoom(SSect ds) {
+    public void returnToRoom(SSect ds, int flags) {
         justRead = 0;
         if (ds.currListPosition >= 0) {
             titleChildAt(ds.currListPosition);

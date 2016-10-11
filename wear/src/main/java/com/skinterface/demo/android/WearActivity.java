@@ -6,6 +6,7 @@ import android.os.AsyncTask;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.Message;
 import android.speech.RecognizerIntent;
 import android.support.annotation.NonNull;
 import android.support.wearable.activity.WearableActivity;
@@ -55,13 +56,18 @@ public class WearActivity extends WearableActivity implements
     static final int SPEECH_REQUEST_CODE    = 1001;
     static final int AUDIO_REQUEST_CODE     = 1002;
 
-    static final int FN1_EDIT   = RsvpFragment.FN1_EDIT;
-    static final int FN1_SEND   = RsvpFragment.FN1_SEND;
-    static final int FN2_RETURN = RsvpFragment.FN2_RETURN;
-    static final int FN2_CANCEL = RsvpFragment.FN2_CANCEL;
+    static final int RSVP_SPEED = 1;
 
-
-    final Handler handler = new Handler(Looper.getMainLooper());
+    final Handler handler = new Handler(Looper.getMainLooper()) {
+        @Override
+        public void handleMessage(Message msg) {
+            switch (msg.what) {
+            case RSVP_SPEED:
+                getRsvpFragment().accelerate(msg.arg1);
+                return;
+            }
+        }
+    };
 
     private ViewGroup mContainerView;
     private TextView mTitleView;
@@ -471,7 +477,10 @@ public class WearActivity extends WearableActivity implements
             flags |= RsvpFragment.FN2_RETURN;
 
         if ((nav_flags & Navigator.FLAG_CHAT) != 0)
-            flags |= RsvpFragment.IS_CHAT;
+            flags |= RsvpFragment.NAV_CHAT;
+        else if ((nav_flags & Navigator.FLAG_SITE) != 0)
+            flags |= RsvpFragment.NAV_SITE;
+
         return flags;
     }
 

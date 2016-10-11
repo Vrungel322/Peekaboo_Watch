@@ -725,8 +725,6 @@ public class MainActivity extends AppCompatActivity implements
             public TextView tvTitle;
             public TextView tvIntro;
             public ImageView ivImage;
-            public Bitmap bitmap;
-            public String imageUrl;
             public Action action;
             public EdtValue editor;
             public ViewHolder(View v) {

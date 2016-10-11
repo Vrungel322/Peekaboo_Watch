@@ -5,13 +5,12 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.graphics.Typeface;
+import android.graphics.Rect;
 import android.os.Bundle;
+import android.os.Message;
+import android.preference.PreferenceManager;
 import android.support.v4.content.LocalBroadcastManager;
 import android.support.wearable.view.CircularButton;
-import android.text.Spannable;
-import android.text.SpannableStringBuilder;
-import android.text.style.StyleSpan;
 import android.util.Log;
 import android.view.GestureDetector;
 import android.view.LayoutInflater;
@@ -46,7 +45,9 @@ public class RsvpFragment extends Fragment implements
     public static final int FN2_RETURN = 0x10;
     public static final int FN2_CANCEL = 0x20;
 
-    public static final int IS_CHAT    = 0x100000;
+    public static final int NAV_MODE   = 0xF00000;
+    public static final int NAV_CHAT   = 0x100000;
+    public static final int NAV_SITE   = 0x200000;
 
     private static final String CHILD_POS_END  = new String("end");
 
@@ -75,11 +76,12 @@ public class RsvpFragment extends Fragment implements
         public void onReceive(Context context, Intent intent) {
             if (RsvpView.ACTION_RSVP_EVENT.equals(intent.getAction())) {
                 String state = intent.getStringExtra(RsvpView.EXTRA_RSVP_STATE);
-                updatePosView(RsvpView.RSVP_STATE_STARTED.equals(state));
+                updatePosView();
             }
         }
     };
 
+    private Rect rect = new Rect();
 
     RsvpView mRsvpView;
     CircularButton mRecordButton;
@@ -144,6 +146,8 @@ public class RsvpFragment extends Fragment implements
     public void load(SSect sect, int flags, boolean play) {
         if (this.sect == sect)
             return;
+        if (mRsvpView != null)
+            mRsvpView.stop(null);
         this.sect = sect;
         this.words = null;
         this.flags = flags;
@@ -180,14 +184,14 @@ public class RsvpFragment extends Fragment implements
         } else {
             mNextButton.setVisibility(View.VISIBLE);
         }
-        if ((flags & IS_CHAT) != 0 && sect != null) {
+        if ((flags & NAV_MODE) == NAV_CHAT && sect != null) {
             this.state = STATE_CHILD;
             this.cguid = CHILD_POS_END;
         } else {
             this.state = STATE_INIT;
             this.cguid = null;
         }
-        updatePosView(play);
+        updatePosView();
         onNext(play);
     }
 
@@ -220,7 +224,7 @@ public class RsvpFragment extends Fragment implements
                     }
                 }
             }
-            updatePosView(false);
+            updatePosView();
         }
     }
 
@@ -232,7 +236,7 @@ public class RsvpFragment extends Fragment implements
             mPositionView.setText("");
     }
 
-    private void updatePosView(boolean playing) {
+    private void updatePosView() {
         if (mRsvpView == null)
             return;
         if (sect == null) {
@@ -247,7 +251,7 @@ public class RsvpFragment extends Fragment implements
             mChatMessageStatusView.setVisibility(View.INVISIBLE);
             return;
         }
-        if ((flags & IS_CHAT) != 0) {
+        if ((flags & NAV_MODE) == NAV_CHAT) {
             int new_messages = 0;
             String status = null;
             long timestamp = 0;
@@ -323,45 +327,77 @@ public class RsvpFragment extends Fragment implements
             mChatMessageStatusView.setImageResource(0);
             mChatMessageStatusView.setVisibility(View.INVISIBLE);
         }
-        SpannableStringBuilder sb = new SpannableStringBuilder();
-        sb.append("*T*");
-        if (sect.hasArticle)
-            sb.append("A*");
-        switch (state) {
-        case STATE_INIT:
-            sb.setSpan(new StyleSpan(Typeface.BOLD), 0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            break;
-        case STATE_DONE:
-            sb.setSpan(new StyleSpan(Typeface.BOLD), sb.length()-1, sb.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            break;
-        case STATE_TITLE:
-            if (playing)
-                sb.setSpan(new StyleSpan(Typeface.BOLD), 1, 2, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            else
-                sb.setSpan(new StyleSpan(Typeface.BOLD), 2, 3, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            break;
-        case STATE_ARTICLE:
-            if (playing)
-                sb.setSpan(new StyleSpan(Typeface.BOLD), 3, 4, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            else
-                sb.setSpan(new StyleSpan(Typeface.BOLD), 4, 5, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
-            break;
-        }
-        if (sect.children != null && sect.children.length > 0) {
-            int cnt = sect.children.length;
-            int pos = sect.currListPosition;
-            if (pos < 0) { pos = -1; playing = false; }
-            if (pos >= cnt) { pos = cnt-1; }
-            if (playing) {
-                sb.insert(sb.length()-1, "*"+pos+"<1>"+(cnt-pos-1));
-            } else {
-                sb.insert(sb.length()-1, "*"+(pos+1)+"<:>"+(cnt-pos-1));
-            }
-            mPrevText.setText(Integer.toString(pos+1));
-            mNextText.setText(Integer.toString(cnt-pos-1));
-        }
-        mPositionView.setText(sb);
+
+
+
+//        SpannableStringBuilder sb = new SpannableStringBuilder();
+//        sb.append("*T*");
+//        if (sect.hasArticle)
+//            sb.append("A*");
+//        switch (state) {
+//        case STATE_INIT:
+//            sb.setSpan(new StyleSpan(Typeface.BOLD), 0, 1, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+//            break;
+//        case STATE_DONE:
+//            sb.setSpan(new StyleSpan(Typeface.BOLD), sb.length()-1, sb.length(), Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+//            break;
+//        case STATE_TITLE:
+//            if (playing)
+//                sb.setSpan(new StyleSpan(Typeface.BOLD), 1, 2, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+//            else
+//                sb.setSpan(new StyleSpan(Typeface.BOLD), 2, 3, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+//            break;
+//        case STATE_ARTICLE:
+//            if (playing)
+//                sb.setSpan(new StyleSpan(Typeface.BOLD), 3, 4, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+//            else
+//                sb.setSpan(new StyleSpan(Typeface.BOLD), 4, 5, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
+//            break;
+//        }
+//        if (sect.children != null && sect.children.length > 0) {
+//            int cnt = sect.children.length;
+//            int pos = sect.currListPosition;
+//            if (pos < 0) { pos = -1; playing = false; }
+//            if (pos >= cnt) { pos = cnt-1; }
+//            if (playing) {
+//                sb.insert(sb.length()-1, "*"+pos+"<1>"+(cnt-pos-1));
+//            } else {
+//                sb.insert(sb.length()-1, "*"+(pos+1)+"<:>"+(cnt-pos-1));
+//            }
+//            mPrevText.setText(Integer.toString(pos+1));
+//            mNextText.setText(Integer.toString(cnt-pos-1));
+//        }
+        mPositionView.setText(getSpeedString());
     }
+
+    private void updateActions() {
+        if ((flags & NAV_MODE) == NAV_SITE) {
+            int vis = View.INVISIBLE;
+            if (sect == null)
+                ;
+            else if (state == STATE_CHILD && sect.children != null && sect.children.length > 0) {
+                if (sect.currListPosition >= 0 && sect.currListPosition <= sect.children.length) {
+                    SSect child = sect.children[sect.currListPosition];
+                    if (child.hasArticle || child.hasChildren) {
+                        mRecordButton.setImageResource(R.drawable.ic_enter);
+                        vis = View.VISIBLE;
+                    }
+                }
+            }
+            else if (state == STATE_INIT || state == STATE_DONE) {
+                if (sect.hasArticle) {
+                    mRecordButton.setImageResource(R.drawable.ic_enter);
+                    vis = View.VISIBLE;
+                }
+                else if (sect.children != null && sect.children.length > 0) {
+                    mRecordButton.setImageResource(R.drawable.ic_enter);
+                    vis = View.VISIBLE;
+                }
+            }
+            mRecordButton.setVisibility(vis);
+        }
+    }
+
 
     private String getSpeedString() {
         int tic = mRsvpView.getTic();
@@ -374,6 +410,7 @@ public class RsvpFragment extends Fragment implements
     private void onRepeat(boolean play) {
         if (mRsvpView == null)
             return;
+        updateActions();
         if (sect == null) {
             state = STATE_DONE;
             cguid = null;
@@ -425,6 +462,7 @@ public class RsvpFragment extends Fragment implements
             cguid = null;
             mRsvpView.stop(null);
             mPositionView.setText(getSpeedString());
+            updateActions();
             return;
         }
         if (play && mRsvpView.isPaused()) {
@@ -440,6 +478,7 @@ public class RsvpFragment extends Fragment implements
             if (sect.descr != null)
                 words.addIntroWords(sect.descr);
             mRsvpView.load(words, play);
+            updateActions();
             return;
         }
         if (state == STATE_TITLE) {
@@ -450,6 +489,7 @@ public class RsvpFragment extends Fragment implements
                 words = new RsvpWords();
                 words.addArticleWords(sect.entity);
                 mRsvpView.load(words, play);
+                updateActions();
                 return;
             }
         }
@@ -465,9 +505,10 @@ public class RsvpFragment extends Fragment implements
                 if (child.descr != null)
                     words.addIntroWords(child.descr);
                 mRsvpView.load(words, play);
+                updateActions();
                 return;
             }
-            else if ( (flags & IS_CHAT) != 0 ) {
+            else if ((flags & NAV_MODE) == NAV_CHAT) {
                 sect.currListPosition = (sect.children == null) ? -1 : sect.children.length;
                 state = STATE_CHILD;
                 cguid = CHILD_POS_END;
@@ -492,10 +533,12 @@ public class RsvpFragment extends Fragment implements
                 cguid = CHILD_POS_END;
                 sect.currListPosition = sect.children.length;
             }
+            updateActions();
             return;
         }
         state = STATE_DONE;
         cguid = null;
+        updateActions();
     }
 
     private void onPrev() {
@@ -506,6 +549,7 @@ public class RsvpFragment extends Fragment implements
             cguid = null;
             mRsvpView.stop(null);
             mPositionView.setText("");
+            updateActions();
             return;
         }
 
@@ -522,12 +566,14 @@ public class RsvpFragment extends Fragment implements
                 if (child.descr != null)
                     words.addIntroWords(child.descr);
                 mRsvpView.load(words, false);
+                updateActions();
                 return;
             }
-            else if ((flags & IS_CHAT) != 0) {
+            else if ((flags & NAV_MODE) == NAV_CHAT) {
                 sect.currListPosition = -1;
                 cguid = null;
-                updatePosView(false);
+                updatePosView();
+                updateActions();
                 return;
             } else {
                 sect.currListPosition = -1;
@@ -545,17 +591,19 @@ public class RsvpFragment extends Fragment implements
             if (sect.descr != null)
                 words.addIntroWords(sect.descr);
             mRsvpView.load(words, false);
+            updateActions();
             return;
         }
         state = STATE_INIT;
         cguid = null;
         mRsvpView.stop(null);
-        updatePosView(false);
+        updatePosView();
+        updateActions();
     }
 
     @Override
     public void onSectionsChanged(SectionsModel model) {
-        updatePosView(false);
+        updatePosView();
     }
 
     @Override
@@ -567,6 +615,32 @@ public class RsvpFragment extends Fragment implements
             }
             else if ( (flags & FN1_MASK) == FN1_SEND ) {
                 ((WearActivity) getActivity()).composeNewChatMessageResult(true); // send
+            }
+
+            if ((flags & NAV_MODE) == NAV_SITE) {
+                if (state == STATE_CHILD && sect.children != null && sect.children.length > 0) {
+                    if (sect.currListPosition >= 0 && sect.currListPosition <= sect.children.length) {
+                        SSect child = sect.children[sect.currListPosition];
+                        if (child.hasArticle || child.hasChildren) {
+                            Action action = new Action("enter").add("sectID", child.guid);
+                            Navigator nav = ((WearActivity) getActivity()).nav;
+                            if (nav instanceof SiteNavigator)
+                                ((SiteNavigator) nav).executeAction(action);
+                        }
+                    }
+                }
+                else if (state == STATE_INIT || state == STATE_DONE) {
+                    if (sect.hasArticle) {
+                        state = STATE_ARTICLE;
+                        onRepeat(true);
+                        return;
+                    }
+                    else if (sect.children != null && sect.children.length > 0) {
+                        state = STATE_CHILD;
+                        toChild(0, false);
+                        return;
+                    }
+                }
             }
         }
         if (id == R.id.prev) {
@@ -611,6 +685,7 @@ public class RsvpFragment extends Fragment implements
 
     public void onUpOrCancel(boolean cancel) {
         Log.d(TAG,"onUpOrCancel: cancel="+cancel);
+        ((WearActivity)getActivity()).handler.removeMessages(WearActivity.RSVP_SPEED);
     }
 
     @Override
@@ -643,46 +718,54 @@ public class RsvpFragment extends Fragment implements
     @Override
     public void onLongPress(MotionEvent event) {
         Log.d(TAG, "onLongPress: " + event.toString());
-//        int x = (int)event.getX();
-//        int y = (int)event.getY();
-//        int Cx = (mRsvpView.getLeft() + mRsvpView.getRight()) / 2;
-//        Rect r = new Rect(Cx - 50, mRsvpView.getTop(), Cx + 50, mRsvpView.getBottom());
-//        if (r.contains(x, y)) {
-//            ((WearActivity) getActivity()).startRecordVoice();
-//            return;
-//        }
-//        r.set(mRsvpView.getRight()-100, r.top, mRsvpView.getRight(), r.bottom);
-//        if (r.contains(x, y)) {
-//            int tic = mRsvpView.getTic();
-//            int idx = 0;
-//            for (; idx < TICS.length-1; ++idx) {
-//                if (tic >= TICS[idx])
-//                    break;
-//            }
-//            if (idx+1 < TICS.length) {
-//                mRsvpView.setTic(TICS[idx + 1]);
-//                PreferenceManager.getDefaultSharedPreferences(getActivity().getApplicationContext())
-//                        .edit().putInt("rsvp_tic", mRsvpView.getTic()).apply();
-//            }
-//            mPositionView.setText(getSpeedString());
-//            return;
-//        }
-//        r.set(mRsvpView.getLeft(), r.top, mRsvpView.getLeft()+100, r.bottom);
-//        if (r.contains(x, y)) {
-//            int tic = mRsvpView.getTic();
-//            int idx = 0;
-//            for (; idx < TICS.length-1; ++idx) {
-//                if (tic >= TICS[idx])
-//                    break;
-//            }
-//            if (idx > 0) {
-//                mRsvpView.setTic(TICS[idx - 1]);
-//                PreferenceManager.getDefaultSharedPreferences(getActivity().getApplicationContext())
-//                        .edit().putInt("rsvp_tic", mRsvpView.getTic()).apply();
-//            }
-//            mPositionView.setText(getSpeedString());
-//            return;
-//        }
+        int x = (int)event.getX();
+        int y = (int)event.getY();
+        mRsvpView.getHitRect(rect);
+        rect.left = rect.right-150;
+        if (rect.contains(x, y)) {
+            ((WearActivity)getActivity()).handler.obtainMessage(WearActivity.RSVP_SPEED, 1, 0).sendToTarget();
+            return;
+        }
+        mRsvpView.getHitRect(rect);
+        rect.right = rect.left+150;
+        if (rect.contains(x, y)) {
+            ((WearActivity)getActivity()).handler.obtainMessage(WearActivity.RSVP_SPEED, -1, 0).sendToTarget();
+            return;
+        }
+    }
+
+    public void accelerate(int delta) {
+        if (delta > 0) {
+            int tic = mRsvpView.getTic();
+            int idx = 0;
+            for (; idx < TICS.length-1; ++idx) {
+                if (tic >= TICS[idx])
+                    break;
+            }
+            if (idx+1 < TICS.length) {
+                mRsvpView.setTic(TICS[idx + 1]);
+                PreferenceManager.getDefaultSharedPreferences(getActivity().getApplicationContext())
+                        .edit().putInt("rsvp_tic", mRsvpView.getTic()).apply();
+                Message msg = ((WearActivity)getActivity()).handler.obtainMessage(WearActivity.RSVP_SPEED, delta, 0);
+                ((WearActivity)getActivity()).handler.sendMessageDelayed(msg, 1600);
+            }
+        }
+        else if (delta < 0) {
+            int tic = mRsvpView.getTic();
+            int idx = 0;
+            for (; idx < TICS.length-1; ++idx) {
+                if (tic >= TICS[idx])
+                    break;
+            }
+            if (idx > 0) {
+                mRsvpView.setTic(TICS[idx - 1]);
+                PreferenceManager.getDefaultSharedPreferences(getActivity().getApplicationContext())
+                        .edit().putInt("rsvp_tic", mRsvpView.getTic()).apply();
+                Message msg = ((WearActivity)getActivity()).handler.obtainMessage(WearActivity.RSVP_SPEED, delta, 0);
+                ((WearActivity)getActivity()).handler.sendMessageDelayed(msg, 1600);
+            }
+        }
+        mPositionView.setText(getSpeedString());
     }
 
     @Override

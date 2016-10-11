@@ -130,7 +130,7 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
         }
         ds.currListPosition = -1;
         currentData = ds;
-        client.enterToRoom(ds, 0);
+        client.enterToRoom(ds, FLAG_SITE);
     }
 
     private void returnToRoom(SSect ds) {
@@ -139,7 +139,7 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
             ds.title = new SEntity();
         }
         currentData = ds;
-        client.returnToRoom(ds, 0);
+        client.returnToRoom(ds, FLAG_SITE);
     }
 
     public void doShowMenu() {
@@ -150,6 +150,55 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
     }
 
     public void doReturn() {
+    }
+
+    public void doDefaultAction() {
+        int justRead = 0;
+        final SSect ds = currentData;
+        if (ds == null)
+            return;
+        SSect theNext = SSect.makeAction("Continue: Guide", "show-menu");
+        {
+            if (ds.returnUp != null && ds.currListPosition < 0) {
+                SSect up = ds.returnUp;
+                SSect[] ch = up.children;
+                if (ch != null && up.currListPosition >= 0) {
+                    theNext = SSect.makeAction("Continue: UP+Next", "auto-next-up");
+                }
+            }
+            if (ds.hasArticle) {
+                if (!ds.nextAsSkip && (justRead & RsvpWords.JR_ARTICLE) == 0)
+                    theNext = SSect.makeAction("Continue: Read", "read");
+            }
+            if (ds.children != null && ds.children.length > 0) {
+                if (!ds.nextAsSkip || ds.returnUp == null) {
+                    if ((justRead & RsvpWords.JR_LIST) == 0) {
+                        theNext = SSect.makeAction("Continue: List", "list");
+                    } else {
+                        for (int position=0; position < ds.children.length; ++position) {
+                            SSect child = ds.children[position];
+                            if (child.isAction) {
+                                theNext = SSect.copyAction(child).padd("position", position);
+                                break;
+                            }
+                            else if (child.hasArticle || child.hasChildren || child.children != null) {
+                                theNext = SSect.makeAction("Continue: Enter", "enter").padd("sectID", child.guid).padd("position", position);
+                                break;
+                            }
+                        }
+                    }
+                }
+                //if ((justRead & RsvpWords.JR_LIST) == 0)
+                //    currActions.add(SSect.makeAction("List", "list"));
+            }
+            if (ds.isAction) {
+                //currActions.add(ds);
+                theNext = SSect.copyAction(ds).prependTitle("Continue: Go to ");
+            }
+        }
+        if (theNext != null) {
+            makeActionHandler(theNext.entity).run();
+        }
     }
 
 
@@ -182,7 +231,7 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
                 nav.doEnterToRoom(nav.currentData);
             }
             else if ("where".equals(act)) {
-                client.showWhereAmIData(nav.currentData, 0);
+                client.showWhereAmIData(nav.currentData, FLAG_SITE);
             }
             else if ("action".equals(act)) {
                 if (nav.currentData.isAction) {

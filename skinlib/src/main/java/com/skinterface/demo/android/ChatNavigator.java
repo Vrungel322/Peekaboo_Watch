@@ -11,6 +11,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
 import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 
 public class ChatNavigator implements Navigator {
@@ -78,6 +79,7 @@ public class ChatNavigator implements Navigator {
         return chat_room == null ? null : chat_room.title.data;
     }
 
+
     @Override
     public void doHello() {
         Action attach = Action.create("attach");
@@ -95,6 +97,12 @@ public class ChatNavigator implements Navigator {
                 }
                 if (!(obj instanceof JSONObject) || obj == JSONObject.NULL)
                     return;
+                HashMap<String,String> predefined = new HashMap<>();
+                predefined.put("121", "AidenEagleton");
+                predefined.put("202", "JohnEagleton");
+                predefined.put("294", "PeekabooChat");
+                predefined.put("629", "userone");
+                predefined.put("642", "Future");
                 wholeMenuTree = SSect.makeMenu("Peekaboo");
                 try {
                     JSONObject jobj = (JSONObject) obj;
@@ -106,6 +114,12 @@ public class ChatNavigator implements Navigator {
                         JSONObject jc = jarr.getJSONObject(i);
                         String id = jc.getString("id");
                         String name = jc.getString("name");
+                        children.add(SSect.makeAction(name, "chat").padd("room", id));
+                        makeChatRoom(id, name);
+                        predefined.remove(id);
+                    }
+                    for (String id : predefined.keySet()) {
+                        String name = predefined.get(id);
                         children.add(SSect.makeAction(name, "chat").padd("room", id));
                         makeChatRoom(id, name);
                     }
@@ -146,7 +160,7 @@ public class ChatNavigator implements Navigator {
         partenrId = partenrId.intern();
         chat = new SSect();
         chat.entity.media = "chat-room";
-        chat.entity.name = partenrId.intern();
+        chat.entity.name = partenrId;
         chat.entity.data = "chat";
         chat.title = new SEntity();
         chat.title.media = "text";
@@ -164,7 +178,7 @@ public class ChatNavigator implements Navigator {
         msg.title = new SEntity();
         msg.title.media = "text";
         msg.title.data = text;
-        msg.chatTimestamp = System.currentTimeMillis();
+        msg.timestamp = System.currentTimeMillis();
         msg.padd("sender", userID);
         msg.padd("receiver", chat_room.entity.name);
         currentData = msg;
@@ -191,6 +205,8 @@ public class ChatNavigator implements Navigator {
         SSect chat = chatRooms.get(partner);
         if (chat == null)
             return null;
+        if (chat.children == null)
+            chat.children = new SSect[0];
 
         long id = jmsg.optLong("id");
         long timestamp = jmsg.optLong("timestamp");
@@ -198,17 +214,19 @@ public class ChatNavigator implements Navigator {
         String sender = jmsg.optString("sender");
         String status = jmsg.optString("status");
         String text = jmsg.optString("text");
-        // find this message in the chat
+        if (sender != null) sender = sender.intern();
+        if (receiver != null) receiver = receiver.intern();
+        // find this message in the chat, or find insert position
+        int ins = -1;
         SSect msg = null;
-        if (chat.children != null) {
-            for (SSect old : chat.children) {
-                if (old.chatId == id) {
-                    msg = old;
-                    break;
-                }
+        for (int pos=0; pos < chat.children.length; ++pos) {
+            SSect old = chat.children[pos];
+            if (old.chatId == id) {
+                msg = old;
+                break;
             }
-        } else {
-            chat.children = new SSect[0];
+            if (ins < 0 && old.timestamp > timestamp)
+                ins = pos;
         }
         if (msg == null) {
             msg = new SSect();
@@ -220,22 +238,23 @@ public class ChatNavigator implements Navigator {
             msg.title.media = "text";
             msg.title.data = text;
             msg.chatId = id;
-            msg.chatTimestamp = timestamp;
+            msg.timestamp = timestamp;
             msg.padd("sender", sender);
             msg.padd("receiver", receiver);
-            int len = chat.children.length;
-            SSect[] arr = Arrays.copyOf(chat.children, len+1);
-            arr[len] = msg;
-            Arrays.sort(arr, new Comparator<SSect>() {
-                @Override
-                public int compare(SSect msg1, SSect msg2) {
-                    if (msg1.chatTimestamp != msg2.chatTimestamp)
-                        return Long.compare(msg1.chatTimestamp, msg2.chatTimestamp);
-                    return Long.compare(msg1.chatId, msg2.chatId);
-                }
-            });
-            chat.children = arr;
+            ArrayList<SSect> lst = new ArrayList<>(Arrays.asList(chat.children));
+            if (ins < 0) {
+                lst.add(msg);
+                if (chat.currListPosition == chat.children.length)
+                    chat.currListPosition += 1;
+            } else {
+                lst.add(ins, msg);
+                if (chat.currListPosition >= ins)
+                    chat.currListPosition += 1;
+            }
+            chat.children = lst.toArray(new SSect[lst.size()]);
         } else {
+            if (msg.timestamp == 0)
+                msg.timestamp = timestamp;
             msg.entity.name = (status == null) ? null : status.intern();
             if (text != null && !text.isEmpty())
                 msg.title.data = text;

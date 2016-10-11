@@ -22,10 +22,10 @@ class SSect {
     public SEntity descr; // entity for section's description
     public SSect[] children; // id,title,descr of children articles
 
-    int currListPosition;
+    int currListPosition = -1;
     SSect returnUp;
     long chatId;
-    long chatTimestamp;
+    long timestamp;
 
     SSect getCurrChild() {
         if (children == null || currListPosition < 0 || currListPosition >= children.length)

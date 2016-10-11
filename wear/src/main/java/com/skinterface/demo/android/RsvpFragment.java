@@ -21,6 +21,9 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import java.text.SimpleDateFormat;
+import java.util.TimeZone;
+
 import static com.skinterface.demo.android.WearActivity.TAG;
 
 public class RsvpFragment extends Fragment implements
@@ -85,6 +88,8 @@ public class RsvpFragment extends Fragment implements
     TextView mPositionView;
     TextView mPrevText;
     TextView mNextText;
+    TextView mChatMessageNewView;
+    TextView mChatMessageTimeView;
     ImageView mChatMessageStatusView;
 
     SSect sect;
@@ -105,8 +110,11 @@ public class RsvpFragment extends Fragment implements
         mPositionView = (TextView) view.findViewById(R.id.position);
         mPrevText = (TextView) view.findViewById(R.id.prev_text);
         mNextText = (TextView) view.findViewById(R.id.next_text);
+        mChatMessageNewView = (TextView) view.findViewById(R.id.chat_message_new);
+        mChatMessageTimeView = (TextView) view.findViewById(R.id.chat_message_time);
         mChatMessageStatusView = (ImageView) view.findViewById(R.id.chat_message_status);
 
+        mChatMessageNewView.setOnClickListener(this);
         mPrevButton.setOnClickListener(this);
         mNextButton.setOnClickListener(this);
         mRecordButton.setOnClickListener(this);
@@ -173,24 +181,27 @@ public class RsvpFragment extends Fragment implements
             mNextButton.setVisibility(View.VISIBLE);
         }
         if ((flags & IS_CHAT) != 0 && sect != null) {
-            this.state = STATE_CHILD + sect.currListPosition;
+            this.state = STATE_CHILD;
             this.cguid = CHILD_POS_END;
         } else {
             this.state = STATE_INIT;
             this.cguid = null;
         }
+        updatePosView(play);
         onNext(play);
     }
 
     public boolean toChild(int idx, boolean play) {
         if (sect == null || sect.children == null)
             return false;
-        if (idx < 0) idx = 0;
+        if (idx < 0) idx = -1;
         if (idx > sect.children.length) idx = sect.children.length;
         sect.currListPosition = idx;
-        this.state = STATE_CHILD + idx;
+        this.state = STATE_CHILD;
         if (idx >= sect.children.length)
             this.cguid = CHILD_POS_END;
+        else if (idx < 0)
+            this.cguid = null;
         else
             this.cguid = sect.children[idx].guid;
         onRepeat(play);
@@ -201,12 +212,10 @@ public class RsvpFragment extends Fragment implements
         if (cguid != null) {
             if (cguid == CHILD_POS_END) {
                 sect.currListPosition = sect.children.length;
-                state = STATE_CHILD + sect.children.length;
             } else {
                 for (int pos = 0; pos < sect.children.length; ++pos) {
                     if (cguid == sect.children[pos].guid) {
                         sect.currListPosition = pos;
-                        state = STATE_CHILD + pos;
                         break;
                     }
                 }
@@ -230,16 +239,65 @@ public class RsvpFragment extends Fragment implements
             mPositionView.setText(getSpeedString());
             mPrevText.setText("");
             mNextText.setText("");
+            mChatMessageNewView.setText("");
+            mChatMessageNewView.setVisibility(View.GONE);
+            mChatMessageTimeView.setText("");
+            mChatMessageTimeView.setVisibility(View.GONE);
             mChatMessageStatusView.setImageResource(0);
             mChatMessageStatusView.setVisibility(View.INVISIBLE);
             return;
         }
         if ((flags & IS_CHAT) != 0) {
+            int new_messages = 0;
             String status = null;
+            long timestamp = 0;
             if (sect != null && sect.children != null) {
-                int pos = state - STATE_CHILD;
-                if (pos >= 0 && pos < sect.children.length)
-                    status = sect.children[pos].entity.name;
+                int pos = sect.currListPosition;
+                if (pos >= 0 && pos < sect.children.length) {
+                    SSect child = sect.children[pos];
+                    status = child.entity.name;
+                    timestamp = child.timestamp;
+                }
+                for (int p=0; p < sect.children.length; ++p) {
+                    SSect msg = sect.children[p];
+                    if (msg.entity.role == "recv" && !"read".equals(msg.entity.name))
+                        new_messages += 1;
+                }
+            }
+            if (new_messages > 0) {
+                mChatMessageNewView.setText(Integer.toString(new_messages));
+                mChatMessageNewView.setVisibility(View.VISIBLE);
+            } else {
+                mChatMessageNewView.setText("");
+                mChatMessageNewView.setVisibility(View.GONE);
+            }
+            long elapsed = System.currentTimeMillis() - timestamp;
+            if (timestamp == 0 || elapsed < 0) {
+                mChatMessageTimeView.setText("");
+                mChatMessageTimeView.setVisibility(View.GONE);
+            }
+            else if (elapsed < 24*60*60*1000 ) {
+                SimpleDateFormat sdf = new SimpleDateFormat("HH:mm");
+                sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+                mChatMessageTimeView.setText(sdf.format(elapsed));
+                mChatMessageTimeView.setVisibility(View.VISIBLE);
+            }
+            else {
+                long days = elapsed / (24*60*60*1000);
+                if (days == 1) {
+                    SimpleDateFormat sdf = new SimpleDateFormat("1'd' HH'h'");
+                    sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+                    mChatMessageTimeView.setText(sdf.format(elapsed));
+                }
+                else if (days <= 7) {
+                    SimpleDateFormat sdf = new SimpleDateFormat("D'd' HH'h'");
+                    sdf.setTimeZone(TimeZone.getTimeZone("UTC"));
+                    mChatMessageTimeView.setText(sdf.format(elapsed));
+                }
+                else {
+                    mChatMessageTimeView.setText(days + " days");
+                }
+                mChatMessageTimeView.setVisibility(View.VISIBLE);
             }
             if (status == "sent") {
                 mChatMessageStatusView.setImageResource(R.drawable.ic_sending);
@@ -258,6 +316,10 @@ public class RsvpFragment extends Fragment implements
                 mChatMessageStatusView.setVisibility(View.INVISIBLE);
             }
         } else {
+            mChatMessageNewView.setText("");
+            mChatMessageNewView.setVisibility(View.GONE);
+            mChatMessageTimeView.setText("");
+            mChatMessageTimeView.setVisibility(View.GONE);
             mChatMessageStatusView.setImageResource(0);
             mChatMessageStatusView.setVisibility(View.INVISIBLE);
         }
@@ -287,7 +349,7 @@ public class RsvpFragment extends Fragment implements
         }
         if (sect.children != null && sect.children.length > 0) {
             int cnt = sect.children.length;
-            int pos = state - STATE_CHILD;
+            int pos = sect.currListPosition;
             if (pos < 0) { pos = -1; playing = false; }
             if (pos >= cnt) { pos = cnt-1; }
             if (playing) {
@@ -341,8 +403,8 @@ public class RsvpFragment extends Fragment implements
             }
             return;
         }
-        if (state >= STATE_CHILD) {
-            int pos = state - STATE_CHILD;
+        if (state == STATE_CHILD) {
+            int pos = sect.currListPosition;
             if (pos < sect.children.length) {
                 SSect child = sect.children[pos];
                 words = new RsvpWords();
@@ -406,7 +468,7 @@ public class RsvpFragment extends Fragment implements
                 return;
             }
             else if ( (flags & IS_CHAT) != 0 ) {
-                sect.currListPosition = 0;
+                sect.currListPosition = (sect.children == null) ? -1 : sect.children.length;
                 state = STATE_CHILD;
                 cguid = CHILD_POS_END;
             }
@@ -415,11 +477,10 @@ public class RsvpFragment extends Fragment implements
                 cguid = null;
             }
         }
-        if (state >= STATE_CHILD) {
-            int pos = state - STATE_CHILD + 1;
+        if (state == STATE_CHILD) {
+            int pos = sect.currListPosition + 1;
             if (pos < sect.children.length) {
                 sect.currListPosition = pos;
-                state = STATE_CHILD + pos;
                 SSect child = sect.children[pos];
                 cguid = child.guid;
                 words = new RsvpWords();
@@ -429,6 +490,7 @@ public class RsvpFragment extends Fragment implements
                 mRsvpView.load(words, play);
             } else {
                 cguid = CHILD_POS_END;
+                sect.currListPosition = sect.children.length;
             }
             return;
         }
@@ -447,13 +509,12 @@ public class RsvpFragment extends Fragment implements
             return;
         }
 
-        if (state >= STATE_CHILD) {
-            int pos = state - STATE_CHILD - 1;
+        if (state == STATE_CHILD) {
+            int pos = sect.currListPosition - 1;
             if (pos >= sect.children.length)
                 pos = sect.children.length - 1;
             if (pos >= 0 && sect.children.length > 0) {
                 sect.currListPosition = pos;
-                state = STATE_CHILD + pos;
                 SSect child = sect.children[pos];
                 cguid = child.guid;
                 words = new RsvpWords();
@@ -464,18 +525,18 @@ public class RsvpFragment extends Fragment implements
                 return;
             }
             else if ((flags & IS_CHAT) != 0) {
-                sect.currListPosition = 0;
-                state = STATE_CHILD;
+                sect.currListPosition = -1;
                 cguid = null;
                 updatePosView(false);
                 return;
             } else {
-                sect.currListPosition = 0;
-                state = STATE_CHILD;
+                sect.currListPosition = -1;
                 cguid = null;
+                state = STATE_ARTICLE;
+                // fall down
             }
         }
-        if (state == STATE_CHILD || state == STATE_ARTICLE) {
+        if (state == STATE_ARTICLE) {
             // show title & description
             state = STATE_TITLE;
             cguid = null;
@@ -499,7 +560,8 @@ public class RsvpFragment extends Fragment implements
 
     @Override
     public void onClick(View v) {
-        if (v.getId() == R.id.record) {
+        int id = v.getId();
+        if (id == R.id.record) {
             if ( (flags & FN1_MASK) == FN1_EDIT ) {
                 ((WearActivity) getActivity()).startVoiceRecognition();
             }
@@ -507,7 +569,7 @@ public class RsvpFragment extends Fragment implements
                 ((WearActivity) getActivity()).composeNewChatMessageResult(true); // send
             }
         }
-        if (v.getId() == R.id.prev) {
+        if (id == R.id.prev) {
             if ( (flags & FN2_MASK) == FN2_RETURN ) {
                 onPrev();
             }
@@ -515,8 +577,18 @@ public class RsvpFragment extends Fragment implements
                 ((WearActivity) getActivity()).composeNewChatMessageResult(false); // cancel
             }
         }
-        if (v.getId() == R.id.next) {
+        if (id == R.id.next) {
             onNext(true);
+        }
+        if (id == R.id.chat_message_new) {
+            for (int p=0; p < sect.children.length; ++p) {
+                SSect msg = sect.children[p];
+                if (msg.entity.role == "recv" && !"read".equals(msg.entity.name)) {
+                    toChild(p, false);
+                    return;
+                }
+            }
+            toChild(sect.children.length, false);
         }
     }
 

@@ -10,8 +10,9 @@ import org.json.JSONTokener;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
-import java.util.UUID;
+import java.util.List;
 
 public class ChatNavigator implements Navigator {
 
@@ -250,7 +251,7 @@ public class ChatNavigator implements Navigator {
             return;
         if (!"chat-text-msg".equals(currentData.entity.media))
             return;
-        if (!"composing".equals(currentData.entity.role))
+        if (!"comp".equals(currentData.entity.role))
             return;
         if (confirmed)
             client.sendChatConfirm(userID, chat_room.entity.name, currentData.title.data);
@@ -325,17 +326,42 @@ public class ChatNavigator implements Navigator {
         return msg;
     }
 
-    private UIAction defaultAction;
-    private ArrayList<UIAction> allActions = new ArrayList<>();
-
     @Override
     public void fillActions(NavClient client) {
-        final SSect ds = currArticle();
-        allActions = new ArrayList<>();
-        defaultAction = null;
-        if (ds == null)
-            return;
-        client.updateActions(defaultAction, allActions);
+        client.updateActions(this, Collections.EMPTY_LIST);
     }
 
+    @Override
+    public UIAction getDefaultUIAction(int dir) {
+        if (chat_room == null) {
+            if (dir == DEFAULT_ACTION_DOWN)
+                return new UIAction("Chat Room", "show-menu");
+            return null;
+        }
+        if (currentData == chat_room) {
+            if (dir == DEFAULT_ACTION_DOWN)
+                return new UIAction("New Message", "edit");
+            if (dir == DEFAULT_ACTION_FORW) {
+                if (currentData.currListPosition < currentData.children.length)
+                    return new UIAction("Play", "play");
+            }
+            return null;
+        }
+        if (currentData != null && "comp".equals(currentData.entity.role)) {
+            // composing a message
+            if (dir == DEFAULT_ACTION_DOWN)
+                return new UIAction("Send Message", "send");
+            if (dir == DEFAULT_ACTION_FORW)
+                return new UIAction("Play", "play");
+            if (dir == DEFAULT_ACTION_BACK)
+                return new UIAction("Close", "close");
+            return null;
+        }
+        return null;
+    }
+
+    @Override
+    public List<UIAction> getUIActions() {
+        return Collections.emptyList();
+    }
 }

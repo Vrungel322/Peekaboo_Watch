@@ -2,6 +2,9 @@ package com.skinterface.demo.android;
 
 import android.os.Bundle;
 
+import java.util.Collections;
+import java.util.List;
+
 public class RootNavigator implements Navigator {
 
     private static RootNavigator instance = new RootNavigator();
@@ -80,5 +83,15 @@ public class RootNavigator implements Navigator {
 
     @Override
     public void fillActions(NavClient client) {
+    }
+
+    @Override
+    public UIAction getDefaultUIAction(int dir) {
+        return null;
+    }
+
+    @Override
+    public List<UIAction> getUIActions() {
+        return Collections.emptyList();
     }
 }

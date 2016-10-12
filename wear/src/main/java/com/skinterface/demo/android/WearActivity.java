@@ -127,7 +127,7 @@ public class WearActivity extends WearableActivity implements
 
         mDetector = new GestureDetector(this, getRsvpFragment(), handler);
 
-        if (saved != null) {
+        if (saved != null && saved.containsKey("navigator")) {
             Bundle b = saved.getBundle("navigator");
             String clazz = b.getString("class");
             if ("SiteNavigator".equals(clazz))
@@ -182,14 +182,15 @@ public class WearActivity extends WearableActivity implements
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        Log.d(TAG, "onTouchEvent: "+event);
         boolean isCancel = event.getActionMasked() == MotionEvent.ACTION_CANCEL;
         boolean isUp = event.getActionMasked() == MotionEvent.ACTION_UP;
         boolean handled = mDetector.onTouchEvent(event);
         if (isCancel)
-            getRsvpFragment().onUpOrCancel(true);
+            getRsvpFragment().onUpOrCancel(event, true);
         else if (!handled && isUp)
-            getRsvpFragment().onUpOrCancel(false);
-        return super.onTouchEvent(event);
+            getRsvpFragment().onUpOrCancel(event, false);
+        return handled || super.onTouchEvent(event);
     }
 
     public void stopCurrentSect() {
@@ -501,20 +502,10 @@ public class WearActivity extends WearableActivity implements
 
     private int flagsNavToRsvp(int nav_flags) {
         int flags = 0;
-        if ((nav_flags & Navigator.FLAG_CAN_EDIT) != 0)
-            flags |= RsvpFragment.FN1_EDIT;
-        else if ((nav_flags & Navigator.FLAG_CAN_SEND) != 0)
-            flags |= RsvpFragment.FN1_SEND;
-        if ((nav_flags & Navigator.FLAG_CAN_ABORT) != 0)
-            flags |= RsvpFragment.FN2_CANCEL;
-        else if ((nav_flags & Navigator.FLAG_CAN_RETURN) != 0)
-            flags |= RsvpFragment.FN2_RETURN;
-
         if ((nav_flags & Navigator.FLAG_CHAT) != 0)
             flags |= RsvpFragment.NAV_CHAT;
         else if ((nav_flags & Navigator.FLAG_SITE) != 0)
             flags |= RsvpFragment.NAV_SITE;
-
         return flags;
     }
 
@@ -546,7 +537,7 @@ public class WearActivity extends WearableActivity implements
     }
 
     @Override
-    public void updateActions(UIAction dflt, List<UIAction> actions) {
+    public void updateActions(Navigator nav, List<UIAction> actions) {
 
     }
 
@@ -674,10 +665,28 @@ public class WearActivity extends WearableActivity implements
         }
     }
     protected class ChatActionHandler extends ActionHandler {
+        final ChatNavigator nav;
+        final ChatNavigator.Client client;
         protected ChatActionHandler(ChatNavigator nav, ChatNavigator.Client client, Action action) {
             super(nav, client, action);
+            this.nav = nav;
+            this.client = client;
         }
         public void run() {
+            String act = action.getAction();
+            if ("show-menu".equals(act)) {
+                nav.doShowMenu(client);
+            }
+            else if ("edit".equals(act)) {
+                startVoiceRecognition();
+            }
+            else if ("send".equals(act)) {
+                nav.composeNewChatMessageResult(client, true);
+            }
+            else if ("close".equals(act)) {
+                nav.composeNewChatMessageResult(client, false);
+            }
+
         }
     }
 }

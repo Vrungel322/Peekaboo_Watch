@@ -14,6 +14,10 @@ public interface Navigator {
     int FLAG_CHAT       = 0x100;
     int FLAG_SITE       = 0x200;
 
+    int DEFAULT_ACTION_FORW = 0;
+    int DEFAULT_ACTION_BACK = 1;
+    int DEFAULT_ACTION_DOWN = 2;
+
     // Just-read Title
     public static final int JR_TITLE   = 0x0001;
     // Just-read Intro
@@ -38,7 +42,7 @@ public interface Navigator {
         void returnToRoom(Navigator nav, SSect sect, int flags);
         void showWhereAmIData(Navigator nav, SSect sect, int flags);
 
-        void updateActions(UIAction dflt, List<UIAction> actions);
+        void updateActions(Navigator nav, List<UIAction> actions);
         void sendServerCmd(Navigator nav, Action action, SrvCallback callback);
     }
 
@@ -62,4 +66,6 @@ public interface Navigator {
     void doReturn(NavClient client);
 
     void fillActions(NavClient client);
+    UIAction getDefaultUIAction(int dir);
+    List<UIAction> getUIActions();
 }

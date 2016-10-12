@@ -67,20 +67,32 @@
         android:textColor="#d5d5d5"
         android:visibility="gone" />
 
-    <android.support.wearable.view.CircularButton
+    <View
+        android:id="@+id/record_bg"
+        android:layout_width="match_parent"
+        android:layout_height="84px"
+        android:layout_alignParentBottom="true"
+        android:background="#248F8F"
+        android:clickable="false"
+        />
+    <ImageView
         android:id="@+id/record"
         android:layout_width="140px"
         android:layout_height="140px"
         android:layout_alignParentBottom="true"
         android:layout_centerHorizontal="true"
         android:layout_marginBottom="-32px"
-        app:imageScaleMode="center"
-        android:color="#248F8F"
+        android:color="@android:color/transparent"
+        android:scaleType="center"
         android:src="@drawable/ic_record"
         android:visibility="invisible"
+        android:clickable="false"
         />
+    <!--app:imageScaleMode="center"-->
+    <!--android.support.wearable.view.CircularButton-->
+    <!--android:color="#248F8F"-->
 
-    <android.support.wearable.view.CircularButton
+    <ImageView
         android:id="@+id/prev"
         android:layout_width="120px"
         android:layout_height="120px"
@@ -88,10 +100,11 @@
         android:layout_toLeftOf="@+id/record"
         android:layout_marginRight="-8px"
         android:layout_marginBottom="80px"
-        app:imageScaleMode="fit"
-        android:color="#248F8F"
-        android:src="@drawable/ic_play"
+        android:scaleType="center"
+        android:color="@android:color/transparent"
+        android:src="@drawable/ic_close"
         android:visibility="invisible"
+        android:clickable="false"
         />
     <TextView
         android:id="@+id/prev_text"
@@ -101,7 +114,7 @@
         android:layout_height="wrap_content"
         android:fontFamily="sans-serif-condensed-light" />
 
-    <android.support.wearable.view.CircularButton
+    <ImageView
         android:id="@+id/next"
         android:layout_width="120px"
         android:layout_height="120px"
@@ -109,10 +122,11 @@
         android:layout_toRightOf="@+id/record"
         android:layout_marginLeft="-8px"
         android:layout_marginBottom="80px"
-        app:imageScaleMode="fit"
-        android:color="#248F8F"
+        android:scaleType="center"
+        android:color="@android:color/transparent"
         android:src="@drawable/ic_play"
         android:visibility="invisible"
+        android:clickable="false"
         />
     <TextView
         android:id="@+id/next_text"

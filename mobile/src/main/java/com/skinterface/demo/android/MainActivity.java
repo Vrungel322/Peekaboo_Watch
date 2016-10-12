@@ -395,9 +395,10 @@ public class MainActivity extends AppCompatActivity implements
         return false;
     }
     @Override
-    public void updateActions(UIAction dflt, List<UIAction> actions) {
+    public void updateActions(Navigator nav, List<UIAction> actions) {
         setButtonEnabled(R.id.sf_return_up, hasAction("return-up", actions));
         setButtonEnabled(R.id.sf_descr,     hasAction("descr", actions));
+        UIAction dflt = nav.getDefaultUIAction(Navigator.DEFAULT_ACTION_FORW);
         if (dflt == null) {
             btnForward.setVisibility(View.GONE);
         } else {

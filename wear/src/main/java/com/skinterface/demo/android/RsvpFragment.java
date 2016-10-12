@@ -37,14 +37,6 @@ public class RsvpFragment extends Fragment implements
     private static final int STATE_ARTICLE = 4;
     private static final int STATE_CHILD   = 5;
 
-    public static final int FN1_MASK   = 0xF;
-    public static final int FN1_EDIT   = 0x1;
-    public static final int FN1_SEND   = 0x2;
-
-    public static final int FN2_MASK   = 0xF0;
-    public static final int FN2_RETURN = 0x10;
-    public static final int FN2_CANCEL = 0x20;
-
     public static final int NAV_MODE   = 0xF00000;
     public static final int NAV_CHAT   = 0x100000;
     public static final int NAV_SITE   = 0x200000;
@@ -84,10 +76,14 @@ public class RsvpFragment extends Fragment implements
     private Rect rect = new Rect();
 
     WearActivity activity;
+    UIAction mRecordAction;
+    UIAction mNextAction;
+    UIAction mPrevAction;
     RsvpView mRsvpView;
-    CircularButton mRecordButton;
-    CircularButton mPrevButton;
-    CircularButton mNextButton;
+    View mDownBgView;
+    View mDownButton;
+    View mPrevButton;
+    View mNextButton;
     TextView mPositionView;
     TextView mPrevText;
     TextView mNextText;
@@ -118,9 +114,10 @@ public class RsvpFragment extends Fragment implements
         LocalBroadcastManager.getInstance(getActivity()).registerReceiver(
                 broadcastReceiver, new IntentFilter(RsvpView.ACTION_RSVP_EVENT));
         View view = inflater.inflate(R.layout.fr_rsvp_round, container, false);
-        mPrevButton = (CircularButton) view.findViewById(R.id.prev);
-        mNextButton = (CircularButton) view.findViewById(R.id.next);
-        mRecordButton = (CircularButton) view.findViewById(R.id.record);
+        mPrevButton = view.findViewById(R.id.prev);
+        mNextButton = view.findViewById(R.id.next);
+        mDownButton = view.findViewById(R.id.record);
+        mDownBgView = view.findViewById(R.id.record_bg);
         mRsvpView = (RsvpView) view.findViewById(R.id.rsvp);
         mPositionView = (TextView) view.findViewById(R.id.position);
         mPrevText = (TextView) view.findViewById(R.id.prev_text);
@@ -130,10 +127,12 @@ public class RsvpFragment extends Fragment implements
         mChatMessageStatusView = (ImageView) view.findViewById(R.id.chat_message_status);
 
         mChatMessageNewView.setOnClickListener(this);
-        mPrevButton.setOnClickListener(this);
-        mNextButton.setOnClickListener(this);
-        mRecordButton.setOnClickListener(this);
-        mRecordButton.setOnLongClickListener(this);
+        mPrevButton.setClickable(false);//mPrevButton.setOnClickListener(this);
+        mNextButton.setClickable(false);//mNextButton.setOnClickListener(this);
+        mDownButton.setClickable(false);//mDownButton.setOnClickListener(this);
+        mDownButton.setLongClickable(false);//mDownButton.setOnLongClickListener(this);
+        mDownBgView.setClickable(false);
+        mDownBgView.setLongClickable(false);
 
         if (saved != null) {
             SSect s = activity.nav.getSectByGUID(saved.getString("rsvp.sect.guid"));
@@ -142,7 +141,7 @@ public class RsvpFragment extends Fragment implements
                 cguid = saved.getString("rsvp.cguid.guid");
                 state = saved.getInt("rsvp.state");
                 flags = saved.getInt("rsvp.flags");
-                initButtons();
+                updateButtons();
                 update();
                 onRepeat(false);
             }
@@ -180,40 +179,84 @@ public class RsvpFragment extends Fragment implements
             mRsvpView.stop(null);
     }
 
-    private void initButtons() {
-        switch ( (flags & FN1_MASK) ) {
-        case FN1_EDIT:
-            mRecordButton.setImageResource(R.drawable.ic_record);
-            mRecordButton.setVisibility(View.VISIBLE);
-            break;
-        case FN1_SEND:
-            mRecordButton.setImageResource(R.drawable.ic_send);
-            mRecordButton.setVisibility(View.VISIBLE);
-            break;
-        case 0:
-        default:
-            mRecordButton.setVisibility(View.INVISIBLE);
-            break;
+    private void setImageResource(View btn, int id) {
+        if (btn instanceof ImageView) {
+            ((ImageView) btn).setImageResource(id);
+            return;
         }
-        switch ( (flags & FN2_MASK) ) {
-        case FN2_RETURN:
-            mPrevButton.setImageResource(R.drawable.ic_return);
-            mPrevButton.setVisibility(View.VISIBLE);
-            break;
-        case FN2_CANCEL:
-            mPrevButton.setImageResource(R.drawable.ic_close);
-            mPrevButton.setVisibility(View.VISIBLE);
-            break;
-        case 0:
-        default:
+        if (btn instanceof CircularButton) {
+            if (id == 0)
+                ((CircularButton) btn).setImageDrawable(null);
+            else
+                ((CircularButton) btn).setImageResource(0);
+        }
+    }
+
+    private void updateButtons() {
+        Navigator nav = activity.nav;
+        if (nav == null) {
+            mRecordAction = null;
+            mNextAction = null;
+            mPrevAction = null;
+            mDownButton.setVisibility(View.INVISIBLE);
+            mDownBgView.setVisibility(View.INVISIBLE);
             mPrevButton.setVisibility(View.INVISIBLE);
-            break;
-        }
-        if (sect == null) {
             mNextButton.setVisibility(View.INVISIBLE);
-        } else {
-            mNextButton.setVisibility(View.VISIBLE);
+            return;
         }
+        mRecordAction = nav.getDefaultUIAction(Navigator.DEFAULT_ACTION_DOWN);
+        mNextAction = nav.getDefaultUIAction(Navigator.DEFAULT_ACTION_FORW);
+        mPrevAction = nav.getDefaultUIAction(Navigator.DEFAULT_ACTION_BACK);
+
+        if (mRecordAction != null) {
+            String act = mRecordAction.action.getAction();
+            if ("show-menu".equals(act))
+                setImageResource(mDownButton, R.drawable.ic_chat);
+            else if ("edit".equals(act))
+                setImageResource(mDownButton, R.drawable.ic_record);
+            else if ("send".equals(act))
+                setImageResource(mDownButton, R.drawable.ic_send);
+            else
+                setImageResource(mDownButton, 0);
+            mDownButton.setVisibility(View.VISIBLE);
+            mDownBgView.setVisibility(View.VISIBLE);
+        } else {
+            mDownButton.setVisibility(View.INVISIBLE);
+            mDownBgView.setVisibility(View.INVISIBLE);
+        }
+
+        if (mNextAction != null) {
+            String act = mNextAction.action.getAction();
+            if ("play".equals(act))
+                setImageResource(mNextButton, R.drawable.ic_play);
+            else
+                setImageResource(mNextButton, 0);
+            mNextButton.setVisibility(View.VISIBLE);
+        } else {
+            mNextButton.setVisibility(View.INVISIBLE);
+        }
+
+        if (mPrevAction != null) {
+            String act = mPrevAction.action.getAction();
+            if ("close".equals(act))
+                setImageResource(mPrevButton, R.drawable.ic_close);
+            else
+                setImageResource(mPrevButton, 0);
+            mPrevButton.setVisibility(View.VISIBLE);
+        } else {
+            mPrevButton.setVisibility(View.INVISIBLE);
+        }
+    }
+
+    public void load(SSect sect, int flags, boolean play) {
+        if (this.sect == sect && sect != null)
+            return;
+        if (mRsvpView != null)
+            mRsvpView.stop(null);
+        this.sect = sect;
+        this.words = null;
+        this.flags = flags;
+
         if ((flags & NAV_MODE) == NAV_CHAT && sect != null) {
             this.state = STATE_CHILD;
             this.cguid = CHILD_POS_END;
@@ -221,17 +264,8 @@ public class RsvpFragment extends Fragment implements
             this.state = STATE_INIT;
             this.cguid = null;
         }
-    }
 
-    public void load(SSect sect, int flags, boolean play) {
-        if (this.sect == sect)
-            return;
-        if (mRsvpView != null)
-            mRsvpView.stop(null);
-        this.sect = sect;
-        this.words = null;
-        this.flags = flags;
-        initButtons();
+        updateButtons();
         updatePosView();
         onNext(play);
     }
@@ -395,23 +429,27 @@ public class RsvpFragment extends Fragment implements
 //                sb.setSpan(new StyleSpan(Typeface.BOLD), 4, 5, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
 //            break;
 //        }
-//        if (sect.children != null && sect.children.length > 0) {
-//            int cnt = sect.children.length;
-//            int pos = sect.currListPosition;
-//            if (pos < 0) { pos = -1; playing = false; }
-//            if (pos >= cnt) { pos = cnt-1; }
-//            if (playing) {
-//                sb.insert(sb.length()-1, "*"+pos+"<1>"+(cnt-pos-1));
-//            } else {
-//                sb.insert(sb.length()-1, "*"+(pos+1)+"<:>"+(cnt-pos-1));
-//            }
-//            mPrevText.setText(Integer.toString(pos+1));
-//            mNextText.setText(Integer.toString(cnt-pos-1));
-//        }
+        if (sect.children != null && sect.children.length > 0) {
+            int cnt = sect.children.length;
+            int pos = sect.currListPosition;
+            if (pos < 0) {
+                mPrevText.setText("");
+                mNextText.setText(Integer.toString(cnt));
+            }
+            else if (pos >= cnt) {
+                mPrevText.setText(Integer.toString(cnt));
+                mNextText.setText("");
+            }
+            else {
+                mPrevText.setText(Integer.toString(pos+1));
+                mNextText.setText(Integer.toString(cnt-pos-1));
+            }
+        }
         mPositionView.setText(getSpeedString());
     }
 
     private void updateActions() {
+        updateButtons();
         if ((flags & NAV_MODE) == NAV_SITE) {
             int vis = View.INVISIBLE;
             if (sect == null)
@@ -420,22 +458,23 @@ public class RsvpFragment extends Fragment implements
                 if (sect.currListPosition >= 0 && sect.currListPosition <= sect.children.length) {
                     SSect child = sect.children[sect.currListPosition];
                     if (child.hasArticle || child.hasChildren) {
-                        mRecordButton.setImageResource(R.drawable.ic_enter);
+                        setImageResource(mDownButton, R.drawable.ic_enter);
                         vis = View.VISIBLE;
                     }
                 }
             }
             else if (state == STATE_INIT || state == STATE_DONE) {
                 if (sect.hasArticle) {
-                    mRecordButton.setImageResource(R.drawable.ic_enter);
+                    setImageResource(mDownButton, R.drawable.ic_enter);
                     vis = View.VISIBLE;
                 }
                 else if (sect.children != null && sect.children.length > 0) {
-                    mRecordButton.setImageResource(R.drawable.ic_enter);
+                    setImageResource(mDownButton, R.drawable.ic_enter);
                     vis = View.VISIBLE;
                 }
             }
-            mRecordButton.setVisibility(vis);
+            mDownButton.setVisibility(vis);
+            mDownBgView.setVisibility(vis);
         }
     }
 
@@ -573,6 +612,8 @@ public class RsvpFragment extends Fragment implements
             } else {
                 cguid = CHILD_POS_END;
                 sect.currListPosition = sect.children.length;
+                mRsvpView.stop(null);
+                updatePosView();
             }
             updateActions();
             return;
@@ -613,6 +654,7 @@ public class RsvpFragment extends Fragment implements
             else if ((flags & NAV_MODE) == NAV_CHAT) {
                 sect.currListPosition = -1;
                 cguid = null;
+                mRsvpView.stop(null);
                 updatePosView();
                 updateActions();
                 return;
@@ -647,15 +689,11 @@ public class RsvpFragment extends Fragment implements
         updatePosView();
     }
 
-    @Override
-    public void onClick(View v) {
-        int id = v.getId();
+    private void doClick(int id) {
         if (id == R.id.record) {
-            if ( (flags & FN1_MASK) == FN1_EDIT ) {
-                activity.startVoiceRecognition();
-            }
-            else if ( (flags & FN1_MASK) == FN1_SEND ) {
-                activity.composeNewChatMessageResult(true); // send
+            if (mRecordAction != null) {
+                activity.makeActionHandler(activity.nav, mRecordAction.action).run();
+                return;
             }
 
             if ((flags & NAV_MODE) == NAV_SITE) {
@@ -683,11 +721,9 @@ public class RsvpFragment extends Fragment implements
             }
         }
         if (id == R.id.prev) {
-            if ( (flags & FN2_MASK) == FN2_RETURN ) {
-                onPrev();
-            }
-            else if ( (flags & FN2_MASK) == FN2_CANCEL ) {
-                ((WearActivity) getActivity()).composeNewChatMessageResult(false); // cancel
+            if (mPrevAction != null) {
+                activity.makeActionHandler(activity.nav, mPrevAction.action).run();
+                return;
             }
         }
         if (id == R.id.next) {
@@ -706,9 +742,14 @@ public class RsvpFragment extends Fragment implements
     }
 
     @Override
+    public void onClick(View v) {
+        doClick(v.getId());
+    }
+
+    @Override
     public boolean onLongClick(View v) {
         if (v.getId() == R.id.record) {
-            if ( (flags & FN1_MASK) == FN1_EDIT ) {
+            if (mRecordAction != null && "edit".equals(mRecordAction.action.getAction())) {
                 ((WearActivity) getActivity()).startVoiceRecording();
                 return true;
             }
@@ -722,8 +763,8 @@ public class RsvpFragment extends Fragment implements
         return true;
     }
 
-    public void onUpOrCancel(boolean cancel) {
-        Log.d(TAG,"onUpOrCancel: cancel="+cancel);
+    public void onUpOrCancel(MotionEvent event, boolean cancel) {
+        Log.d(TAG,"onUpOrCancel: "+(cancel?"cancel":"up")+event);
         ((WearActivity)getActivity()).handler.removeMessages(WearActivity.RSVP_SPEED);
     }
 
@@ -771,6 +812,19 @@ public class RsvpFragment extends Fragment implements
             ((WearActivity)getActivity()).handler.obtainMessage(WearActivity.RSVP_SPEED, -1, 0).sendToTarget();
             return;
         }
+
+        // check 'bottom round' and 'bottom flat' button pressed
+        int r = 70;
+        int cx = 480/2;
+        int cy = 480-70+32;
+        int d2 = (cx-x)*(cx-x) + (cy-y)*(cy-y);
+        if (d2 < r*r || y > (480-84)) {
+            if (mRecordAction != null && "edit".equals(mRecordAction.action.getAction())) {
+                ((WearActivity) getActivity()).startVoiceRecording();
+                return;
+            }
+        }
+
     }
 
     public void accelerate(int delta) {
@@ -821,6 +875,32 @@ public class RsvpFragment extends Fragment implements
     @Override
     public boolean onSingleTapUp(MotionEvent event) {
         Log.d(TAG, "onSingleTapUp: " + event.toString());
+
+        int x = (int)event.getX();
+        int y = (int)event.getY();
+
+        // check 'bottom round' and 'bottom flat' button pressed
+        int r = 70;
+        int cx = 480/2;
+        int cy = 480-70+32;
+        int d2 = (cx-x)*(cx-x) + (cy-y)*(cy-y);
+        if (d2 < r*r || y > (480-84)) {
+            doClick(R.id.record);
+            return true;
+        }
+
+        // check 'next' button pressed
+        if (y > 272 && y < (480-84) && x > 280) {
+            doClick(R.id.next);
+            return true;
+        }
+
+        // check 'prev' button pressed
+        if (y > 272 && y < (480-84) && x < 200) {
+            doClick(R.id.prev);
+            return true;
+        }
+
         return true;
     }
 

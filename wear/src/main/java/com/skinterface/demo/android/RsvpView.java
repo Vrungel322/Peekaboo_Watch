@@ -50,7 +50,7 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
 
     static final int BLACK = 0xFF0F0F0F;
     static final int GRAY = 0xFF4B4b4b;
-    static final int RED = 0xFFCC3333;
+    static final int RED = 0xFFD83332;
     static final int WHITE = 0xFFEEEEEE;
     int CANVAS_W = 480;
     int CANVAS_H = 116;

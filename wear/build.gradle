@@ -9,8 +9,8 @@ android {
         applicationId "com.skinterface.demo.android"
         minSdkVersion 20
         targetSdkVersion 24
-        versionCode 1
-        versionName "1.0"
+        versionCode 101
+        versionName "1.1"
     }
     buildTypes {
         release {

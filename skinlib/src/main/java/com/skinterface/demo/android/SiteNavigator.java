@@ -7,7 +7,9 @@ import org.json.JSONObject;
 import org.json.JSONTokener;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -395,7 +397,19 @@ public class SiteNavigator implements Navigator {
                 defaultAction = new UIAction(ds).prependTitle("Go to ");
             }
         }
-        client.updateActions(defaultAction, allActions);
+        client.updateActions(this, allActions);
     }
 
+
+    @Override
+    public UIAction getDefaultUIAction(int dir) {
+        if (dir == DEFAULT_ACTION_FORW)
+            return defaultAction;
+        return null;
+    }
+
+    @Override
+    public List<UIAction> getUIActions() {
+        return allActions;
+    }
 }

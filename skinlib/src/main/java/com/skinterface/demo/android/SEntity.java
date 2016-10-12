@@ -4,6 +4,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
+import java.io.Serializable;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.Map;
@@ -11,7 +12,7 @@ import java.util.Map;
 /**
  * Server class for Entity (text, image, etc)
  */
-class SEntity {
+public class SEntity implements Serializable {
 
     public String media = "none"; // media (start of mime type: "text", "image" and so on)
     public String role; // entity or sub-section role (withing it's parent)

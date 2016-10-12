@@ -26,21 +26,6 @@ public final class RsvpWords {
     public static final char WORD_JOINER = ' '; // '·'
     public static final char WORD_SHY = '\u00AD';
 
-    // Just-read Title
-    public static final int JR_TITLE   = 1;
-    // Just-read Intro
-    public static final int JR_INTRO   = 2;
-    // Just-read Article
-    public static final int JR_ARTICLE = 4;
-    // Just-read Value
-    public static final int JR_VALUE   = 8;
-    // Just-read Warning
-    public static final int JR_WARNING = 16;
-    // Just-read Menu
-    public static final int JR_MENU    = 32;
-    // Just-read list of children
-    public static final int JR_LIST    = 64;
-
     public static class Word {
         final char icon;
         final String word;
@@ -93,26 +78,26 @@ public final class RsvpWords {
         return this;
     }
     public RsvpWords addTitleWords(SEntity entity) {
-        return addWords(JR_TITLE, '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
+        return addWords(Navigator.JR_TITLE, '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addIntroWords(SEntity entity) {
-        return addWords(JR_INTRO, '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
+        return addWords(Navigator.JR_INTRO, '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addArticleWords(SEntity entity) {
-        return addWords(JR_ARTICLE, '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
+        return addWords(Navigator.JR_ARTICLE, '\0', entity == null ? null : entity.data, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addMenuWords(int idx, SEntity entity) {
-        return addWords(JR_MENU, (char)('1'+idx), entity == null ? "***" : entity.data, 3*DEFAULT_WEIGHT);
+        return addWords(Navigator.JR_MENU, (char)('1'+idx), entity == null ? "***" : entity.data, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addWarning(String text) {
-        justRead |= JR_WARNING;
-        return addWords(JR_WARNING, '⚠', text, 3*DEFAULT_WEIGHT);
+        justRead |= Navigator.JR_WARNING;
+        return addWords(Navigator.JR_WARNING, '⚠', text, 3*DEFAULT_WEIGHT);
     }
     public RsvpWords addValueWords(SSect sect) {
         if (sect == null || !sect.isValue)
             return this;
         SEntity entity = sect.entity;
-        justRead |= JR_VALUE;
+        justRead |= Navigator.JR_VALUE;
         char ch = '#';
         if ("date".equals(entity.media) || "datetime".equals(entity.media))
             ch = '⏲';
@@ -125,9 +110,9 @@ public final class RsvpWords {
         String val = makeValueText(entity);
         if (val != null) {
             if (val.isEmpty()) {
-                addWords(JR_VALUE, ch, "∅", 3*DEFAULT_WEIGHT);
+                addWords(Navigator.JR_VALUE, ch, "∅", 3*DEFAULT_WEIGHT);
             } else {
-                addWords(JR_VALUE, ch, val, 3*DEFAULT_WEIGHT);
+                addWords(Navigator.JR_VALUE, ch, val, 3*DEFAULT_WEIGHT);
             }
         }
         return this;

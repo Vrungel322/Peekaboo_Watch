@@ -39,14 +39,15 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
 
 public class WearActivity extends WearableActivity implements
         View.OnClickListener,
-        ChatNavigator.SrvClient,
-        SiteNavigator.SrvClient
+        ChatNavigator.Client,
+        SiteNavigator.Client
 {
     public static final String TAG = "SkinterWatch";
 
@@ -76,11 +77,11 @@ public class WearActivity extends WearableActivity implements
     private Set<Node> mVoiceNodes;
     private GoogleApiClient mGoogleApiClient;
 
-    Navigator nav = new SiteNavigator(this);
+    Navigator nav = RootNavigator.get();
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onCreate(Bundle saved) {
+        super.onCreate(saved);
         setContentView(R.layout.activity_main);
 //        setAmbientEnabled();
 
@@ -126,7 +127,33 @@ public class WearActivity extends WearableActivity implements
 
         mDetector = new GestureDetector(this, getRsvpFragment(), handler);
 
+        if (saved != null) {
+            Bundle b = saved.getBundle("navigator");
+            String clazz = b.getString("class");
+            if ("SiteNavigator".equals(clazz))
+                nav = new SiteNavigator(b);
+            else if ("ChatNavigator".equals(clazz))
+                nav = new ChatNavigator(b);
+        }
+
         onNewIntent(getIntent());
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (nav instanceof ChatNavigator) {
+            Bundle b = new Bundle();
+            b.putString("class", "ChatNavigator");
+            nav.onSaveInstanceState(b);
+            outState.putBundle("navigator", b);
+        }
+        else if (nav instanceof SiteNavigator) {
+            Bundle b = new Bundle();
+            b.putString("class", "SiteNavigator");
+            nav.onSaveInstanceState(b);
+            outState.putBundle("navigator", b);
+        }
     }
 
     public void startCardsActivity() {
@@ -144,7 +171,7 @@ public class WearActivity extends WearableActivity implements
     public boolean onKeyUp(int keyCode, KeyEvent event) {
         Log.i(TAG, "onKeyUp: " + keyCode + " : " + event);
         if (keyCode == KeyEvent.KEYCODE_STEM_2) {
-            nav.doShowMenu();
+            nav.doShowMenu(this);
         }
         return super.onKeyUp(keyCode, event);
     }
@@ -171,19 +198,23 @@ public class WearActivity extends WearableActivity implements
             fr.stop();
     }
     public void mergeChatMessage(JSONObject jmsg) {
-        SSect msg = ChatNavigator.mergeChatMessage(jmsg);
-        if (msg != null)
-            getRsvpFragment().update();
+        try {
+            SSect msg = ChatNavigator.mergeChatMessage(jmsg);
+            if (msg != null)
+                getRsvpFragment().update();
+        } catch (JSONException e) {
+            Log.e(TAG, "Bad chat message", e);
+        }
     }
 
     public void composeNewChatMessage(String text) {
         if (nav instanceof ChatNavigator)
-            ((ChatNavigator) nav).composeNewChatMessage(text);
+            ((ChatNavigator) nav).composeNewChatMessage(this, text);
     }
 
     public void composeNewChatMessageResult(boolean confirmed) {
         if (nav instanceof ChatNavigator)
-            ((ChatNavigator) nav).composeNewChatMessageResult(confirmed);
+            ((ChatNavigator) nav).composeNewChatMessageResult(this, confirmed);
     }
 
     @Override
@@ -315,7 +346,7 @@ public class WearActivity extends WearableActivity implements
     public void onClick(View v) {
         int id = v.getId();
         if (id == R.id.title) {
-            nav.doShowMenu();
+            nav.doShowMenu(this);
         }
         if (id == R.id.text || id == R.id.clock)
             startCardsActivity();
@@ -421,25 +452,24 @@ public class WearActivity extends WearableActivity implements
         if (menu == null)
             return;
         if ("upstars".equals(menu.entity.data)) {
-            nav = new SiteNavigator(this);
+            nav = new SiteNavigator(null);
             mTitleView.setText("UpStars");
             getRsvpFragment().load(null, 0, false);
-            nav.doHello();
+            nav.doHello(this);
         }
         else if ("peekaboo".equals(menu.entity.data)) {
-            nav = new ChatNavigator(this);
+            nav = new ChatNavigator(null);
             mTitleView.setText("Peekaboo");
             getRsvpFragment().load(null, 0, false);
-            nav.doHello();
+            nav.doHello(this);
         }
         else if ("show".equals(menu.entity.data)) {
-            if (nav instanceof SiteNavigator)
-                ((SiteNavigator)nav).makeActionHandler(menu.entity).run();
+            makeActionHandler(nav, menu.toAction()).run();
         }
         else if ("chat".equals(menu.entity.data)) {
             String id = menu.entity.val("room");
             if (nav instanceof ChatNavigator) {
-                SSect chat = ((ChatNavigator)nav).doEnterToRoom(id);
+                SSect chat = ((ChatNavigator)nav).doEnterToRoom(this, id);
                 if (chat != null) {
                     mTitleView.setText(chat.title.data);
                     //getRsvpFragment().load(chat, RsvpFragment.FN1_EDIT|RsvpFragment.IS_CHAT, false);
@@ -450,7 +480,7 @@ public class WearActivity extends WearableActivity implements
     }
 
     @Override
-    public void showMenu(final SSect menu) {
+    public void showMenu(Navigator nav, final SSect menu) {
         stopCurrentSect();
         if (menu == null)
             return;
@@ -461,8 +491,12 @@ public class WearActivity extends WearableActivity implements
     }
 
     @Override
-    public SiteNavigator.ActionHandler makeActionHandler(SiteNavigator nav, Action action) {
-        return new ActionHandler(nav, this, action);
+    public ActionHandler makeActionHandler(Navigator nav, Action action) {
+        if (nav instanceof SiteNavigator)
+            return new SiteActionHandler((SiteNavigator)nav, this, action);
+        if (nav instanceof ChatNavigator)
+            return new ChatActionHandler((ChatNavigator)nav, this, action);
+        throw new UnsupportedOperationException("Unknown navigator: "+nav.getClass());
     }
 
     private int flagsNavToRsvp(int nav_flags) {
@@ -485,7 +519,7 @@ public class WearActivity extends WearableActivity implements
     }
 
     @Override
-    public void enterToRoom(SSect sect, int flags) {
+    public void enterToRoom(Navigator nav, SSect sect, int flags) {
         if (nav instanceof ChatNavigator) {
             getRsvpFragment().load(sect, flagsNavToRsvp(flags), false);
             if (sect.currListPosition == 0 && sect.children != null && (flags & Navigator.FLAG_CHAT) != 0)
@@ -496,13 +530,13 @@ public class WearActivity extends WearableActivity implements
     }
 
     @Override
-    public void returnToRoom(SSect sect, int flags) {
+    public void returnToRoom(Navigator nav, SSect sect, int flags) {
         getRsvpFragment().load(sect, flagsNavToRsvp(flags), false);
         getRsvpFragment().toChild(sect.currListPosition, false);
     }
 
     @Override
-    public void showWhereAmIData(SSect sect, int flags) {
+    public void showWhereAmIData(Navigator nav, SSect sect, int flags) {
         getRsvpFragment().load(sect, flagsNavToRsvp(flags), true);
     }
 
@@ -511,12 +545,26 @@ public class WearActivity extends WearableActivity implements
         return true;
     }
 
-    public void attachToSite(SSect menu) {
-        ((SiteNavigator)nav).executeAction(new Action("home"));
+    @Override
+    public void updateActions(UIAction dflt, List<UIAction> actions) {
+
+    }
+
+    public void attachToSite(SiteNavigator nav, SSect menu) {
+        makeActionHandler(nav, new Action("home")).run();
     }
 
     @Override
-    public void chatServerCmd(Action action, String data, ChatNavigator nav, final SrvCallback callback) {
+    public void sendServerCmd(Navigator nav, Action action, final SrvCallback callback) {
+        if (nav instanceof SiteNavigator)
+            siteServerCmd((SiteNavigator)nav, action, callback);
+        else if (nav instanceof ChatNavigator)
+            chatServerCmd((ChatNavigator)nav, action, callback);
+        else
+            throw new UnsupportedOperationException("Unknown navigator: "+nav.getClass());
+    }
+
+    private void chatServerCmd(ChatNavigator nav, Action action, final SrvCallback callback) {
         Uri.Builder uri = new Uri.Builder().path(IOUtils.CHAT_ACTION_PATH+action.getAction());
         if (action.params != null) {
             for (Map.Entry<String, String> e : action.params.entrySet()) {
@@ -526,12 +574,10 @@ public class WearActivity extends WearableActivity implements
                     uri.appendQueryParameter(e.getKey(), "");
             }
         }
-        if (data == null)
-            data = "";
         String nodeId = pickBestNodeId();
         if (nodeId != null) {
             PendingResult<MessageApi.SendMessageResult> result = Wearable.MessageApi.sendMessage(
-                    mGoogleApiClient, nodeId, uri.toString(), data.getBytes(IOUtils.UTF8));
+                    mGoogleApiClient, nodeId, uri.toString(), new byte[0]);
             if (callback != null)
                 result.setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
                         @Override
@@ -543,9 +589,8 @@ public class WearActivity extends WearableActivity implements
         }
     }
 
-    @Override
-    public void siteServerCmd(Action action, SiteNavigator nav, final SrvCallback callback) {
-        final  String reqData = action.serializeToCmd(nav.sessionID, 0).toString();
+    private void siteServerCmd(SiteNavigator nav, Action action, final SrvCallback callback) {
+        final  String reqData = action.serializeToCmd(nav.getSessionID(), 0).toString();
         String nodeId = pickBestNodeId();
         if (nodeId != null) {
             PendingResult<MessageApi.SendMessageResult> result = Wearable.MessageApi.sendMessage(
@@ -611,8 +656,8 @@ public class WearActivity extends WearableActivity implements
         }
     }
 
-    protected class ActionHandler extends SiteNavigator.BaseActionHandler {
-        protected ActionHandler(SiteNavigator nav, SiteNavigator.SrvClient client, Action action) {
+    protected class SiteActionHandler extends SiteNavigator.BaseActionHandler {
+        protected SiteActionHandler(SiteNavigator nav, SiteNavigator.Client client, Action action) {
             super(nav, client, action);
         }
         public void run() {
@@ -626,6 +671,13 @@ public class WearActivity extends WearableActivity implements
             else {
                 super.run();
             }
+        }
+    }
+    protected class ChatActionHandler extends ActionHandler {
+        protected ChatActionHandler(ChatNavigator nav, ChatNavigator.Client client, Action action) {
+            super(nav, client, action);
+        }
+        public void run() {
         }
     }
 }

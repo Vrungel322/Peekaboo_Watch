@@ -83,6 +83,7 @@ public class RsvpFragment extends Fragment implements
 
     private Rect rect = new Rect();
 
+    WearActivity activity;
     RsvpView mRsvpView;
     CircularButton mRecordButton;
     CircularButton mPrevButton;
@@ -99,6 +100,18 @@ public class RsvpFragment extends Fragment implements
     int state;
     int flags;
     String cguid;
+
+    @Override
+    public void onAttach(Context context) {
+        super.onAttach(context);
+        activity = (WearActivity) getActivity();
+    }
+
+    @Override
+    public void onDetach() {
+        super.onDetach();
+        activity = null;
+    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle saved) {
@@ -121,6 +134,19 @@ public class RsvpFragment extends Fragment implements
         mNextButton.setOnClickListener(this);
         mRecordButton.setOnClickListener(this);
         mRecordButton.setOnLongClickListener(this);
+
+        if (saved != null) {
+            SSect s = activity.nav.getSectByGUID(saved.getString("rsvp.sect.guid"));
+            if (s != null) {
+                sect = s;
+                cguid = saved.getString("rsvp.cguid.guid");
+                state = saved.getInt("rsvp.state");
+                flags = saved.getInt("rsvp.flags");
+                initButtons();
+                update();
+                onRepeat(false);
+            }
+        }
         return view;
     }
 
@@ -128,6 +154,17 @@ public class RsvpFragment extends Fragment implements
     public void onDestroyView() {
         super.onDestroyView();
         LocalBroadcastManager.getInstance(getActivity()).unregisterReceiver(broadcastReceiver);
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        if (sect != null) {
+            outState.putString("rsvp.sect.guid", sect.guid);
+            outState.putString("rsvp.cguid.guid", cguid);
+            outState.putInt("rsvp.state", state);
+            outState.putInt("rsvp.flags", flags);
+        }
     }
 
     @Override
@@ -143,14 +180,7 @@ public class RsvpFragment extends Fragment implements
             mRsvpView.stop(null);
     }
 
-    public void load(SSect sect, int flags, boolean play) {
-        if (this.sect == sect)
-            return;
-        if (mRsvpView != null)
-            mRsvpView.stop(null);
-        this.sect = sect;
-        this.words = null;
-        this.flags = flags;
+    private void initButtons() {
         switch ( (flags & FN1_MASK) ) {
         case FN1_EDIT:
             mRecordButton.setImageResource(R.drawable.ic_record);
@@ -191,6 +221,17 @@ public class RsvpFragment extends Fragment implements
             this.state = STATE_INIT;
             this.cguid = null;
         }
+    }
+
+    public void load(SSect sect, int flags, boolean play) {
+        if (this.sect == sect)
+            return;
+        if (mRsvpView != null)
+            mRsvpView.stop(null);
+        this.sect = sect;
+        this.words = null;
+        this.flags = flags;
+        initButtons();
         updatePosView();
         onNext(play);
     }
@@ -224,8 +265,8 @@ public class RsvpFragment extends Fragment implements
                     }
                 }
             }
-            updatePosView();
         }
+        updatePosView();
     }
 
     public void stop() {
@@ -260,7 +301,7 @@ public class RsvpFragment extends Fragment implements
                 if (pos >= 0 && pos < sect.children.length) {
                     SSect child = sect.children[pos];
                     status = child.entity.name;
-                    timestamp = child.timestamp;
+                    timestamp = Long.parseLong(child.entity.val("timestamp", "0"));
                 }
                 for (int p=0; p < sect.children.length; ++p) {
                     SSect msg = sect.children[p];
@@ -611,10 +652,10 @@ public class RsvpFragment extends Fragment implements
         int id = v.getId();
         if (id == R.id.record) {
             if ( (flags & FN1_MASK) == FN1_EDIT ) {
-                ((WearActivity) getActivity()).startVoiceRecognition();
+                activity.startVoiceRecognition();
             }
             else if ( (flags & FN1_MASK) == FN1_SEND ) {
-                ((WearActivity) getActivity()).composeNewChatMessageResult(true); // send
+                activity.composeNewChatMessageResult(true); // send
             }
 
             if ((flags & NAV_MODE) == NAV_SITE) {
@@ -623,9 +664,7 @@ public class RsvpFragment extends Fragment implements
                         SSect child = sect.children[sect.currListPosition];
                         if (child.hasArticle || child.hasChildren) {
                             Action action = new Action("enter").add("sectID", child.guid);
-                            Navigator nav = ((WearActivity) getActivity()).nav;
-                            if (nav instanceof SiteNavigator)
-                                ((SiteNavigator) nav).executeAction(action);
+                            activity.makeActionHandler(activity.nav, action).run();
                         }
                     }
                 }

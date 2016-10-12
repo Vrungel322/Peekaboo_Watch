@@ -5,10 +5,12 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
+import java.io.Serializable;
+
 /**
  * Server-Section
  */
-class SSect {
+public class SSect implements Serializable {
 
     final
     public SEntity entity = new SEntity(); // entity for this section
@@ -24,8 +26,6 @@ class SSect {
 
     int currListPosition = -1;
     SSect returnUp;
-    long chatId;
-    long timestamp;
 
     SSect getCurrChild() {
         if (children == null || currListPosition < 0 || currListPosition >= children.length)
@@ -155,6 +155,15 @@ class SSect {
         ds.title.role = "title";
         ds.title.data = title;
         return ds;
+    }
+
+    public Action toAction() {
+        Action action = Action.create(entity.data);
+        if (entity.props != null) {
+            for (String key : entity.props.keySet())
+                action.add(key, entity.props.get(key));
+        }
+        return action;
     }
 
     public String toString() {

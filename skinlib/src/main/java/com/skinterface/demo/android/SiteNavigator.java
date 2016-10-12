@@ -1,79 +1,66 @@
 package com.skinterface.demo.android;
 
-import android.os.Handler;
-import android.os.Looper;
+import android.os.Bundle;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Locale;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
-public class SiteNavigator implements Navigator, Action.ActionExecutor {
+public class SiteNavigator implements Navigator {
 
     public static final String TAG = "SkinterPhone";
 
-    final static ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
-    final static Handler handler = new Handler(Looper.getMainLooper());
+    private static final Map<String, SSectInfo> sectInfoMap = new ConcurrentHashMap<>();
 
-    static final SSect chooseModelMenu;
-    static {
-        chooseModelMenu = SSect.makeMenu("Site");
-        chooseModelMenu.children = new SSect[] {
-                SSect.makeAction("UpStars", "upstars"),
-                SSect.makeAction("Peekaboo", "peekaboo"),
-        };
+    private String sessionID;
+
+    class SSectInfo {
+        int jr_flags;
     }
-
-    public final SrvClient client;
-
-    String sessionID;
 
     // Loaded site menu
-    SSect wholeMenuTree;
+    private SSect wholeMenuTree;
     // Current data
-    SSect currentData;
+    private SSect currentData;
+    private int jr_flags;
 
-    public interface SrvClient {
-        boolean isStory();
-        ActionHandler makeActionHandler(SiteNavigator nav, Action action);
-        void attachToSite(SSect menu);
-        void enterToRoom(SSect sect, int flags);
-        void returnToRoom(SSect sect, int flags);
-        void showWhereAmIData(SSect sect, int flags);
-        void showMenu(SSect menu);
-        void siteServerCmd(Action action, SiteNavigator nav, SrvCallback callback);
+    public interface Client extends NavClient {
+        void attachToSite(SiteNavigator nav, SSect menu);
     }
-    public static abstract class ActionHandler implements Runnable {
-        public final SiteNavigator nav;
-        public final SrvClient client;
-        public final Action action;
-        protected ActionHandler(SiteNavigator nav, SrvClient client, Action action) {
-            this.nav = nav;
-            this.client = client;
-            this.action = action;
+
+    public SiteNavigator(Bundle saved) {
+        if (saved != null) {
+            sessionID = saved.getString("sessionID");
+            if (saved.containsKey("menu"))
+                wholeMenuTree = SSect.fromJson(saved.getString("menu"));
+            if (saved.containsKey("curr"))
+                currentData = SSect.fromJson(saved.getString("curr"));
         }
-        public abstract void run();
-    }
-
-    public SiteNavigator(SrvClient client) {
-        this.client = client;
     }
 
     @Override
-    public final void executeAction(Action action) {
-        client.makeActionHandler(this, action).run();
+    public void onSaveInstanceState(Bundle outState) {
+        if (sessionID != null)
+            outState.putString("sessionID", sessionID);
+        if (wholeMenuTree != null)
+            outState.putString("menu", wholeMenuTree.fillJson(new JSONObject()).toString());
+        if (currentData != null)
+            outState.putString("curr", currentData.fillJson(new JSONObject()).toString());
     }
 
-    public final ActionHandler makeActionHandler(SEntity entity) {
-        Action action = Action.create(entity.data);
-        if (entity.props != null) {
-            for (String key : entity.props.keySet())
-                action.add(key, entity.props.get(key));
-        }
-        return client.makeActionHandler(this, action);
+    public String getSessionID() {
+        return sessionID;
+    }
+
+    @Override
+    public SSect siteMenu() {
+        return wholeMenuTree;
     }
 
     @Override
@@ -95,11 +82,45 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
         return currentData.children[i];
     }
 
-    public void doHello() {
+    @Override
+    public SSect getSectByGUID(String guid) {
+        if (guid == null)
+            return null;
+        if (currentData != null && guid.equals(currentData.guid))
+            return currentData;
+        return null;
+    }
+
+    @Override
+    public void setJustShown(int jr_flags) {
+        this.jr_flags = jr_flags;
+        if (currentData == null || currentData.guid == null || currentData.guid.isEmpty())
+            return;
+        SSectInfo info = sectInfoMap.get(currentData.guid);
+        if (info == null)
+            sectInfoMap.put(currentData.guid, info=new SSectInfo());
+        info.jr_flags |= jr_flags;
+    }
+    @Override
+    public boolean isJustShown(int jr_flag) {
+        return (this.jr_flags & jr_flag) != 0;
+    }
+    @Override
+    public boolean isEverShown(int jr_flag) {
+        if (currentData == null || currentData.guid == null)
+            return false;
+        SSectInfo info = sectInfoMap.get(currentData.guid);
+        if (info == null)
+            return false;
+        return (info.jr_flags & jr_flags) != 0;
+    }
+
+
+    public void doHello(final NavClient client) {
         String lang = Locale.getDefault().getLanguage();
         Action hello = Action.create("hello");
         hello.add("lang", lang);
-        client.siteServerCmd(hello, this, new SrvCallback() {
+        client.sendServerCmd(this, hello, new SrvCallback() {
             @Override
             public void onSuccess(String result) {
                 if (result == null || result.length() == 0)
@@ -118,93 +139,66 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
                 if (sessionID == null || !sessionID.equals(result))
                     sessionID = id;
                 String nav_menu = client.isStory() ? "site-nav-menu-story" : "site-nav-menu";
-                executeAction(new Action("menu").add("sectID", nav_menu));
+                client.makeActionHandler(SiteNavigator.this, new Action("menu").add("sectID", nav_menu)).run();
             }
         });
     }
 
-    public void doEnterToRoom(SSect ds) {
+    private boolean guidMatchCurrent(SSect ds) {
+        if (ds == null || ds.guid == null || ds.guid.isEmpty())
+            return false;
+        SSect cd = currentData;
+        if (cd == null || cd.guid == null || cd.guid.isEmpty())
+            return false;
+        return ds.guid.equals(cd.guid);
+    }
+
+    public void doEnterToRoom(final NavClient client, SSect ds) {
         if (ds == null) {
             ds = new SSect();
             ds.title = new SEntity();
         }
         ds.currListPosition = -1;
+        if (!guidMatchCurrent(ds))
+            jr_flags = 0;
         currentData = ds;
-        client.enterToRoom(ds, FLAG_SITE);
+        client.enterToRoom(this, ds, FLAG_SITE);
     }
 
-    private void returnToRoom(SSect ds) {
+    private void returnToRoom(final NavClient client, SSect ds) {
         if (ds == null) {
             ds = new SSect();
             ds.title = new SEntity();
         }
+        if (!guidMatchCurrent(ds))
+            jr_flags = 0;
         currentData = ds;
-        client.returnToRoom(ds, FLAG_SITE);
+        client.returnToRoom(this, ds, FLAG_SITE);
     }
 
-    public void doShowMenu() {
+    public void doShowMenu(final NavClient client) {
         if (wholeMenuTree == null)
-            client.showMenu(chooseModelMenu);
+            RootNavigator.get().doShowMenu(client);
         else
-            client.showMenu(wholeMenuTree);
+            client.showMenu(this, wholeMenuTree);
     }
 
-    public void doReturn() {
+    public void doReturn(final NavClient client) {
     }
 
-    public void doDefaultAction() {
-        int justRead = 0;
-        final SSect ds = currentData;
-        if (ds == null)
-            return;
-        SSect theNext = SSect.makeAction("Continue: Guide", "show-menu");
-        {
-            if (ds.returnUp != null && ds.currListPosition < 0) {
-                SSect up = ds.returnUp;
-                SSect[] ch = up.children;
-                if (ch != null && up.currListPosition >= 0) {
-                    theNext = SSect.makeAction("Continue: UP+Next", "auto-next-up");
-                }
-            }
-            if (ds.hasArticle) {
-                if (!ds.nextAsSkip && (justRead & RsvpWords.JR_ARTICLE) == 0)
-                    theNext = SSect.makeAction("Continue: Read", "read");
-            }
-            if (ds.children != null && ds.children.length > 0) {
-                if (!ds.nextAsSkip || ds.returnUp == null) {
-                    if ((justRead & RsvpWords.JR_LIST) == 0) {
-                        theNext = SSect.makeAction("Continue: List", "list");
-                    } else {
-                        for (int position=0; position < ds.children.length; ++position) {
-                            SSect child = ds.children[position];
-                            if (child.isAction) {
-                                theNext = SSect.copyAction(child).padd("position", position);
-                                break;
-                            }
-                            else if (child.hasArticle || child.hasChildren || child.children != null) {
-                                theNext = SSect.makeAction("Continue: Enter", "enter").padd("sectID", child.guid).padd("position", position);
-                                break;
-                            }
-                        }
-                    }
-                }
-                //if ((justRead & RsvpWords.JR_LIST) == 0)
-                //    currActions.add(SSect.makeAction("List", "list"));
-            }
-            if (ds.isAction) {
-                //currActions.add(ds);
-                theNext = SSect.copyAction(ds).prependTitle("Continue: Go to ");
-            }
-        }
-        if (theNext != null) {
-            makeActionHandler(theNext.entity).run();
-        }
+    public void doDefaultAction(final NavClient client) {
+        if (defaultAction != null)
+            client.makeActionHandler(this, defaultAction.action).run();
     }
 
 
     protected static class BaseActionHandler extends ActionHandler {
-        public BaseActionHandler(SiteNavigator nav, SrvClient client, Action action) {
+        final SiteNavigator nav;
+        final Client client;
+        protected BaseActionHandler(SiteNavigator nav, Client client, Action action) {
             super(nav, client, action);
+            this.nav = nav;
+            this.client = client;
         }
 
         @Override
@@ -228,18 +222,18 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
             else if ("stop".equals(act)) {
                 if (nav.currentData != null)
                     nav.currentData.currListPosition = -1;
-                nav.doEnterToRoom(nav.currentData);
+                nav.doEnterToRoom(client, nav.currentData);
             }
             else if ("where".equals(act)) {
-                client.showWhereAmIData(nav.currentData, FLAG_SITE);
+                client.showWhereAmIData(nav, nav.currentData, FLAG_SITE);
             }
             else if ("action".equals(act)) {
                 if (nav.currentData.isAction) {
-                    nav.makeActionHandler(nav.currentData.entity).run();
+                    client.makeActionHandler(nav, nav.currentData.toAction()).run();
                 }
             }
             else if ("set".equals(act)) {
-                client.siteServerCmd(action, nav, new SrvCallback() {
+                client.sendServerCmd(nav, action, new SrvCallback() {
                     @Override
                     public void onSuccess(String result) {
                         //if (result != null)
@@ -253,31 +247,31 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
                         nav.currentData.currListPosition = Integer.parseInt(action.val("position"));
                     action.del("position");
                 }
-                client.siteServerCmd(action, nav, new SrvCallback() {
+                client.sendServerCmd(nav, action, new SrvCallback() {
                     @Override
                     public void onSuccess(String result) {
                         SSect ds = SSect.fromJson(result);
                         if (ds == null)
                             ds = new SSect();
-                        nav.doEnterToRoom(ds);
+                        nav.doEnterToRoom(client, ds);
                     }
                 });
             }
             else if ("show-menu".equals(act)) {
-                nav.doShowMenu();
+                nav.doShowMenu(client);
             }
             else if ("menu".equals(act)) {
-                client.siteServerCmd(action, nav, new SrvCallback() {
+                client.sendServerCmd(nav, action, new SrvCallback() {
                     @Override
                     public void onSuccess(String result) {
                         SSect ds = SSect.fromJson(result);
                         nav.wholeMenuTree = ds;
-                        client.attachToSite(ds);
+                        client.attachToSite(nav, ds);
                     }
                 });
             }
             else if ("hello".equals(act)) {
-                nav.doHello();
+                nav.doHello(client);
             }
         }
 
@@ -290,7 +284,7 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
                 show.setAction("enter");
                 show.add("vname", up.entity.name);
             }
-            client.siteServerCmd(show, nav, new SrvCallback() {
+            client.sendServerCmd(nav, show, new SrvCallback() {
                 @Override
                 public void onSuccess(String result) {
                     SSect ds = SSect.fromJson(result);
@@ -319,7 +313,7 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
                             }
                         }
                     }
-                    nav.doEnterToRoom(ds);
+                    nav.doEnterToRoom(client, ds);
                 }
             });
         }
@@ -328,16 +322,80 @@ public class SiteNavigator implements Navigator, Action.ActionExecutor {
                 parent.currListPosition = Integer.parseInt(action.val("position"));
                 action.del("position");
             }
-            client.siteServerCmd(action, nav, new SrvCallback() {
+            client.sendServerCmd(nav, action, new SrvCallback() {
                 @Override
                 public void onSuccess(String result) {
                     SSect ds = SSect.fromJson(result);
                     if (ds == null)
                         ds = new SSect();
                     ds.returnUp = parent;
-                    nav.doEnterToRoom(ds);
+                    nav.doEnterToRoom(client, ds);
                 }
             });
         }
     }
+
+
+    private UIAction defaultAction;
+    private ArrayList<UIAction> allActions = new ArrayList<>();
+
+    @Override
+    public void fillActions(NavClient client) {
+        final SSect ds = currArticle();
+        allActions = new ArrayList<>();
+        if (ds == null) {
+            defaultAction = new UIAction("Hello UpStars", "hello");
+            return;
+        }
+        defaultAction = new UIAction("Guide", "show-menu");
+        {
+            if (ds.returnUp != null)
+                allActions.add(new UIAction("Return Up", "return-up"));
+            if (ds.returnUp != null && ds.currListPosition < 0) {
+                SSect up = ds.returnUp;
+                SSect[] ch = up.children;
+                if (ch != null && up.currListPosition >= 0) {
+                    //boolean has_prev = (up.currListPosition > 0);
+                    //boolean has_next = (up.currListPosition < ch.length - 1);
+                    //currActions.add(SSect.makeAction("PREV", has_prev ? "sibling-prev" : "none"));
+                    //currActions.add(SSect.makeAction("NEXT", has_next ? "sibling-next" : "none"));
+                    defaultAction = new UIAction("UP+Next", "auto-next-up");
+                }
+            }
+            if (ds.descr != null)
+                allActions.add(new UIAction("Describe", "descr"));
+            if (ds.hasArticle) {
+                if (!ds.nextAsSkip && !isJustShown(JR_ARTICLE))
+                    defaultAction = new UIAction("Read", "read");
+                //currActions.add(SSect.makeAction("Read", "read"));
+            }
+            if (ds.children != null && ds.children.length > 0) {
+                if (!ds.nextAsSkip || ds.returnUp == null) {
+                    if (!isJustShown(JR_LIST)) {
+                        defaultAction = new UIAction("List", "list");
+                    } else {
+                        for (int position=0; position < ds.children.length; ++position) {
+                            SSect child = ds.children[position];
+                            if (child.isAction) {
+                                defaultAction = new UIAction(child).padd("position", position);
+                                break;
+                            }
+                            else if (child.hasArticle || child.hasChildren || child.children != null) {
+                                defaultAction = new UIAction("Enter", "enter").padd("sectID", child.guid).padd("position", position);
+                                break;
+                            }
+                        }
+                    }
+                }
+                //if ((justRead & RsvpWords.JR_LIST) == 0)
+                //    currActions.add(SSect.makeAction("List", "list"));
+            }
+            if (ds.isAction) {
+                //currActions.add(ds);
+                defaultAction = new UIAction(ds).prependTitle("Go to ");
+            }
+        }
+        client.updateActions(defaultAction, allActions);
+    }
+
 }

@@ -53,12 +53,14 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
+import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.LinkedList;
+import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Queue;
@@ -70,7 +72,7 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
 public class MainActivity extends AppCompatActivity implements
         View.OnClickListener,
-        SiteNavigator.SrvClient
+        SiteNavigator.Client
 {
 
     public static final String TAG = "SkinterPhone";
@@ -78,7 +80,14 @@ public class MainActivity extends AppCompatActivity implements
     static final int CAPS = 0;
 
     final static ScheduledExecutorService executor = Executors.newSingleThreadScheduledExecutor();
-    final Handler handler = new Handler(Looper.getMainLooper());
+    final static MainHandler handler = new MainHandler(Looper.getMainLooper());
+
+    static class MainHandler extends Handler {
+        WeakReference<MainActivity> activityWeakReference;
+        MainHandler(Looper looper) {
+            super(looper);
+        }
+    };
 
     ScrollView mainTextScroller;
     TextView tvText;
@@ -86,15 +95,11 @@ public class MainActivity extends AppCompatActivity implements
     RecyclerView rvChildren;
     ImageButton btnForward;
 
-    final SiteNavigator nav = new SiteNavigator(this);
+    SiteNavigator nav;
     // Session storage
     Map<String,String> storage = new HashMap<>();
-    // Current default next action
-    SSect actionAutoNext;
-    // describes what was just presented (shown, read) to user
-    int justRead;
 
-    Queue<String> voiceQueue = new LinkedList<>();
+    //Queue<String> voiceQueue = new LinkedList<>();
     //boolean voiceBusy;
 
     // Rapid serial visual presentation panel (spritz-like reader)
@@ -109,12 +114,17 @@ public class MainActivity extends AppCompatActivity implements
             if (RsvpService.ACTION_CONNECTIONS_CHANGED.equals(intent.getAction())) {
                 supportInvalidateOptionsMenu();
             }
+            if (TTSGenerator.ACTION_GENERATOR_STATUS.equals(intent.getAction())) {
+                tvStatus.setText(intent.getStringExtra("status"));
+                tvStatus.setVisibility(View.VISIBLE);
+                tvText.setText(intent.getStringExtra("text"));
+            }
         }
     };
 
     @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
+    protected void onCreate(Bundle saved) {
+        super.onCreate(saved);
         setContentView(R.layout.activity_main);
         Toolbar mToolbar = (Toolbar) findViewById(R.id.toolbar);
         setSupportActionBar(mToolbar);
@@ -127,7 +137,6 @@ public class MainActivity extends AppCompatActivity implements
         rvChildren.setVisibility(View.GONE);
         setButtonEnabled(R.id.sf_return_up, false);
         setButtonEnabled(R.id.sf_descr, false);
-        actionAutoNext = SSect.makeAction("Continue: Hello UpStars", "hello");
         btnForward = (ImageButton) findViewById(R.id.sf_next_auto);
         btnForward.setImageResource(R.drawable.ic_flare_black_48dp);
         btnForward.setOnClickListener(this);
@@ -135,6 +144,26 @@ public class MainActivity extends AppCompatActivity implements
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(RsvpService.ACTION_CONNECTIONS_CHANGED);
         LocalBroadcastManager.getInstance(this).registerReceiver(broadcastReceiver, intentFilter);
+
+        nav = new SiteNavigator(saved==null?null:saved.getBundle("navigator"));
+        handler.activityWeakReference = new WeakReference<>(this);
+    }
+
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        Bundle b = new Bundle();
+        b.putString("class", "SiteNavigator");
+        nav.onSaveInstanceState(b);
+        outState.putBundle("navigator", b);
+    }
+
+    @Override
+    protected void onRestoreInstanceState(Bundle saved) {
+        super.onRestoreInstanceState(saved);
+        if (saved != null) {
+            enterToRoom(nav, nav.currArticle(), Navigator.FLAG_SITE);
+        }
     }
 
     @Override
@@ -142,14 +171,15 @@ public class MainActivity extends AppCompatActivity implements
         return false;
     }
 
-    public void attachToSite(SSect menu) {
-        nav.executeAction(new Action("home"));
+    public void attachToSite(SiteNavigator nav, SSect menu) {
+        makeActionHandler(nav, new Action("home")).run();
     }
 
     @Override
     protected void onDestroy() {
         LocalBroadcastManager.getInstance(this).unregisterReceiver(broadcastReceiver);
         super.onDestroy();
+        handler.activityWeakReference = null;
     }
 
     @Override
@@ -261,30 +291,40 @@ public class MainActivity extends AppCompatActivity implements
             return true;
         }
         if (id == R.id.sf_hello) {
-            nav.doHello();
+            nav.doHello(this);
         }
         if (id == R.id.sf_menu) {
-            showMenu(nav.wholeMenuTree);
+            showMenu(nav, nav.siteMenu());
             return true;
         }
         if (id == R.id.sf_descr) {
-            nav.executeAction(new Action("descr"));
+            makeActionHandler(nav, new Action("descr")).run();
             return true;
         }
         if (id == R.id.sf_next_auto) {
-            if (actionAutoNext != null)
-                nav.makeActionHandler(actionAutoNext.entity).run();
+            nav.doDefaultAction(this);
             return true;
         }
         if (id == R.id.sf_return_up) {
-            nav.executeAction(new Action("return-up"));
+            makeActionHandler(nav, new Action("return-up")).run();
             return true;
         }
         if (id == R.id.run_tts) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
-                tts_text_files = null;
-                tts_lang = GEN_TTS_LANGS[0];
-                runTTS();
+                if (TTSGenerator.instance != null)
+                    return true;
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !TTSGenerator.permissionChecked) {
+                    int res = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+                    if (res != PERMISSION_GRANTED) {
+                        requestPermissions(new String[]{
+                                Manifest.permission.READ_EXTERNAL_STORAGE,
+                                Manifest.permission.WRITE_EXTERNAL_STORAGE
+                        }, 1);
+                        return true;
+                    }
+                    TTSGenerator.permissionChecked = true;
+                }
+                new TTSGenerator(getApplicationContext()).runTTS();
             }
             return true;
         }
@@ -312,8 +352,10 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
-    public ActionHandler makeActionHandler(SiteNavigator nav, Action action) {
-        return new ActionHandler(nav, this, action);
+    public ActionHandler makeActionHandler(Navigator nav, Action action) {
+        if (nav instanceof SiteNavigator)
+            return new SiteActionHandler((SiteNavigator)nav, this, action);
+        throw new UnsupportedOperationException("Unknown navigator: "+nav.getClass());
     }
 
     boolean introWasShown(SSect ds) {
@@ -345,89 +387,39 @@ public class MainActivity extends AppCompatActivity implements
         }
     }
 
-    void fillCommands() {
-        actionAutoNext = null;
-        final SSect ds = nav.currentData;
-        if (ds != null) {
-            SSect theNext = SSect.makeAction("Continue: Guide", "show-menu");
-            {
-                setButtonEnabled(R.id.sf_return_up, ds.returnUp != null);
-                if (ds.returnUp != null && ds.currListPosition < 0) {
-                    SSect up = ds.returnUp;
-                    SSect[] ch = up.children;
-                    if (ch != null && up.currListPosition >= 0) {
-                        boolean has_prev = (up.currListPosition > 0);
-                        boolean has_next = (up.currListPosition < ch.length - 1);
-                        //currActions.add(SSect.makeAction("PREV", has_prev ? "sibling-prev" : "none"));
-                        //currActions.add(SSect.makeAction("NEXT", has_next ? "sibling-next" : "none"));
-                        theNext = SSect.makeAction("Continue: UP+Next", "auto-next-up");
-                    }
-                }
-                setButtonEnabled(R.id.sf_descr, ds.descr != null);
-                if (ds.hasArticle) {
-                    if (!ds.nextAsSkip && (justRead & RsvpWords.JR_ARTICLE) == 0)
-                        theNext = SSect.makeAction("Continue: Read", "read");
-                    //currActions.add(SSect.makeAction("Read", "read"));
-                }
-                if (ds.children != null && ds.children.length > 0) {
-                    if (!ds.nextAsSkip || ds.returnUp == null) {
-                        if ((justRead & RsvpWords.JR_LIST) == 0) {
-                            theNext = SSect.makeAction("Continue: List", "list");
-                        } else {
-                            for (int position=0; position < ds.children.length; ++position) {
-                                SSect child = ds.children[position];
-                                if (child.isAction) {
-                                    theNext = SSect.copyAction(child).padd("position", position);
-                                    break;
-                                }
-                                else if (child.hasArticle || child.hasChildren || child.children != null) {
-                                    theNext = SSect.makeAction("Continue: Enter", "enter").padd("sectID", child.guid).padd("position", position);
-                                    break;
-                                }
-                            }
-                        }
-                    }
-                    //if ((justRead & RsvpWords.JR_LIST) == 0)
-                    //    currActions.add(SSect.makeAction("List", "list"));
-                }
-                if (ds.isAction) {
-                    //currActions.add(ds);
-                    theNext = SSect.copyAction(ds).prependTitle("Continue: Go to ");
-                }
-            }
-            actionAutoNext = theNext;
-        } else {
-            actionAutoNext = SSect.makeAction("Continue: Hello UpStars", "hello");
+    private boolean hasAction(String act, List<UIAction> actions) {
+        for (UIAction uia : actions) {
+            if (act.equals(uia.action.getAction()))
+                return true;
         }
-        updateCommands();
+        return false;
     }
-    void updateCommands() {
-        ArrayList<SSect> actions = new ArrayList<>();
-        {
-            if (actionAutoNext == null) {
-                btnForward.setVisibility(View.GONE);
-            } else {
-                btnForward.setVisibility(View.VISIBLE);
-                String act = actionAutoNext.entity.data;
-                if ("read".equals(act))
-                    btnForward.setImageResource(R.drawable.ic_format_align_left_black_48dp);
-                else if ("list".equals(act))
-                    btnForward.setImageResource(R.drawable.ic_format_list_bulleted_black_48dp);
-                else if ("auto-next-up".equals(act))
-                    btnForward.setImageResource(R.drawable.ic_redo_black_48dp);
-                else if ("enter".equals(act) || "show".equals(act))
-                    btnForward.setImageResource(R.drawable.ic_exit_to_app_black_48dp);
-                else if ("show-menu".equals(act))
-                    btnForward.setImageResource(R.drawable.ic_menu_black_48dp);
-                else
-                    btnForward.setImageResource(R.drawable.ic_touch_app_black_48dp);
-            }
+    @Override
+    public void updateActions(UIAction dflt, List<UIAction> actions) {
+        setButtonEnabled(R.id.sf_return_up, hasAction("return-up", actions));
+        setButtonEnabled(R.id.sf_descr,     hasAction("descr", actions));
+        if (dflt == null) {
+            btnForward.setVisibility(View.GONE);
+        } else {
+            btnForward.setVisibility(View.VISIBLE);
+            String act = dflt.action.getAction();
+            if ("read".equals(act))
+                btnForward.setImageResource(R.drawable.ic_format_align_left_black_48dp);
+            else if ("auto-next-up".equals(act))
+                btnForward.setImageResource(R.drawable.ic_redo_black_48dp);
+            else if ("enter".equals(act) || "show".equals(act))
+                btnForward.setImageResource(R.drawable.ic_exit_to_app_black_48dp);
+            else if ("show-menu".equals(act))
+                btnForward.setImageResource(R.drawable.ic_menu_black_48dp);
+            else
+                btnForward.setImageResource(R.drawable.ic_touch_app_black_48dp);
         }
     }
 
+
     @Override
-    public void siteServerCmd(Action action, SiteNavigator nav, final SrvCallback callback) {
-        final  String reqData = action.serializeToCmd(nav.sessionID, CAPS).toString();
+    public void sendServerCmd(Navigator nav, Action action, final SrvCallback callback) {
+        final  String reqData = action.serializeToCmd(((SiteNavigator)nav).getSessionID(), CAPS).toString();
         executor.execute(new Runnable() {
             @Override
             public void run() {
@@ -477,44 +469,42 @@ public class MainActivity extends AppCompatActivity implements
         });
     }
 
-    protected class ActionHandler extends SiteNavigator.BaseActionHandler {
-        protected ActionHandler(SiteNavigator nav, SiteNavigator.SrvClient client, Action action) {
+    protected class SiteActionHandler extends SiteNavigator.BaseActionHandler {
+        SiteActionHandler(SiteNavigator nav, SiteNavigator.Client client, Action action) {
             super(nav, client, action);
         }
         public void run() {
             setStatus("");
+            final SSect ds = nav.currArticle();
             String act = action.getAction();
-            if ("list".equals(act)) {
-                titleChildAt(0);
-            }
-            else if ("descr".equals(act)) {
+            if ("descr".equals(act)) {
                 RsvpWords words = new RsvpWords()
-                        .addTitleWords(nav.currentData.title)
+                        .addTitleWords(ds.title)
                         .addPause()
-                        .addIntroWords(nav.currentData.descr);
-                introSetShown(nav.currentData, true);
-                nav.currentData.currListPosition = -1;
+                        .addIntroWords(ds.descr);
+                introSetShown(ds, true);
+                ds.currListPosition = -1;
                 play(words);
-                fillCommands();
+                nav.fillActions(client);
                 stopVoice();
-                playVoice(nav.currentData.title);
-                playVoice(nav.currentData.descr);
+                playVoice(ds.title);
+                playVoice(ds.descr);
             }
             else if ("read".equals(act)) {
                 stopVoice();
-                nav.currentData.currListPosition = -1;
+                ds.currListPosition = -1;
                 RsvpWords words = new RsvpWords();
-                words.addTitleWords(nav.currentData.title).addPause();
-                playVoice(nav.currentData.title);
-                if (nav.currentData.hasArticle) {
-                    words.addArticleWords(nav.currentData.entity);
-                    playVoice(nav.currentData.entity);
+                words.addTitleWords(ds.title).addPause();
+                playVoice(ds.title);
+                if (ds.hasArticle) {
+                    words.addArticleWords(ds.entity);
+                    playVoice(ds.entity);
                 } else {
-                    words.addIntroWords(nav.currentData.descr);
-                    playVoice(nav.currentData.descr);
+                    words.addIntroWords(ds.descr);
+                    playVoice(ds.descr);
                 }
                 play(words);
-                fillCommands();
+                nav.fillActions(client);
             }
             else {
                 super.run();
@@ -525,11 +515,11 @@ public class MainActivity extends AppCompatActivity implements
     void play(final RsvpWords words) {
         if (words == null || words.size() == 0) {
             tvStatus.setText("Empty data");
-            justRead = 0;
+            nav.setJustShown(0);
             return;
         }
 
-        justRead = words.getJustRead();
+        nav.setJustShown(words.getJustRead());
 
         tvText.setText("");
         SpannableStringBuilder sb = new SpannableStringBuilder();
@@ -538,11 +528,11 @@ public class MainActivity extends AppCompatActivity implements
             int beg = sb.length();
             int end = beg + text.length();
             sb.append(text);
-            if (part.type == RsvpWords.JR_TITLE) {
+            if (part.type == Navigator.JR_TITLE) {
                 sb.setSpan(new RelativeSizeSpan(1.2f), beg, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
                 sb.setSpan(new StyleSpan(Typeface.BOLD), beg, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
-            else if (part.type == RsvpWords.JR_INTRO) {
+            else if (part.type == Navigator.JR_INTRO) {
                 sb.setSpan(new StyleSpan(Typeface.ITALIC), beg, end, Spannable.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
             sb.append('\n').append('\n');
@@ -559,8 +549,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     protected void titleChildAt(int pos) {
-        justRead = 0;
-        final SSect ds = nav.currentData;
+        final SSect ds = nav.currArticle();
         if (ds != null) {
             if (ds.children == null || ds.children.length == 0) {
                 ds.currListPosition = -1;
@@ -582,14 +571,14 @@ public class MainActivity extends AppCompatActivity implements
                 stopVoice();
                 playVoice(ds.title);
                 playValueVoice(ds);
+                nav.setJustShown(Navigator.JR_LIST);
             }
-            justRead |= RsvpWords.JR_LIST;
         }
-        fillCommands();
+        nav.fillActions(this);
     }
 
     @Override
-    public void showWhereAmIData(final SSect ds, int flags) {
+    public void showWhereAmIData(Navigator nav, final SSect ds, int flags) {
         if (ds == null) {
             play(new RsvpWords().addWarning("Place is not known"));
             return;
@@ -612,8 +601,7 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
-    public void enterToRoom(final SSect ds, int flags) {
-        justRead = 0;
+    public void enterToRoom(Navigator nav, final SSect ds, int flags) {
         if (!introWasShown(ds) && ds.descr == null)
             introSetShown(ds, true);
 
@@ -646,17 +634,16 @@ public class MainActivity extends AppCompatActivity implements
         playValueVoice(ds);
         play(words);
         if (rvChildren.getVisibility() == View.VISIBLE)
-            justRead |= RsvpWords.JR_LIST;
-        fillCommands();
+            nav.setJustShown(Navigator.JR_LIST);
+        nav.fillActions(this);
     }
 
     @Override
-    public void returnToRoom(SSect ds, int flags) {
-        justRead = 0;
+    public void returnToRoom(Navigator nav, SSect ds, int flags) {
         if (ds.currListPosition >= 0) {
             titleChildAt(ds.currListPosition);
         } else {
-            nav.doEnterToRoom(ds);
+            enterToRoom(nav, ds, flags);
         }
     }
 
@@ -674,17 +661,17 @@ public class MainActivity extends AppCompatActivity implements
     }
 
     @Override
-    public void showMenu(final SSect action) {
+    public void showMenu(final Navigator nav, final SSect action) {
         if (action == null)
             return;
         if (action.children != null && action.children.length > 0) {
-            final ArrayAdapter<SSect> adapter = new ArrayAdapter<>(MainActivity.this,
+            final ArrayAdapter<SSect> adapter = new ArrayAdapter<>(this,
                     android.R.layout.select_dialog_singlechoice,
                     action.children);
             String title = "UpStart Guide";
             if (action.title != null && action.title.data != null)
                 title = action.title.data;
-            new AlertDialog.Builder(MainActivity.this)
+            new AlertDialog.Builder(this)
                     .setTitle(title)
                     .setNegativeButton(R.string.txt_cancel, new DialogInterface.OnClickListener() {
                         @Override
@@ -696,7 +683,7 @@ public class MainActivity extends AppCompatActivity implements
                         @Override
                         public void onClick(DialogInterface dialog, int which) {
                             dialog.dismiss();
-                            showMenu(findParentMenu(nav.wholeMenuTree, action));
+                            showMenu(nav, findParentMenu(nav.siteMenu(), action));
                         }
                     })
                     .setSingleChoiceItems(adapter, -1, new DialogInterface.OnClickListener() {
@@ -704,13 +691,13 @@ public class MainActivity extends AppCompatActivity implements
                         public void onClick(DialogInterface dialog, int which) {
                             dialog.dismiss();
                             SSect action = adapter.getItem(which);
-                            showMenu(action);
+                            showMenu(nav, action);
                         }
                     })
                     .show();
         }
         else if (action.entity.data != null) {
-            nav.makeActionHandler(action.entity).run();
+            makeActionHandler(nav, action.toAction()).run();
         }
     }
 
@@ -722,12 +709,12 @@ public class MainActivity extends AppCompatActivity implements
         // you provide access to all the views for a data item in a view holder
         class ViewHolder extends RecyclerView.ViewHolder implements View.OnClickListener {
             // each data item is just a string in this case
-            public TextView tvTitle;
-            public TextView tvIntro;
-            public ImageView ivImage;
-            public Action action;
-            public EdtValue editor;
-            public ViewHolder(View v) {
+            TextView tvTitle;
+            TextView tvIntro;
+            ImageView ivImage;
+            Action action;
+            EdtValue editor;
+            ViewHolder(View v) {
                 super(v);
                 tvTitle = (TextView) v.findViewById(R.id.tv_title);
                 tvIntro = (TextView) v.findViewById(R.id.tv_intro);
@@ -738,7 +725,7 @@ public class MainActivity extends AppCompatActivity implements
             public void onClick(View view) {
                 if (action != null) {
                     mSect.currListPosition = getAdapterPosition();
-                    nav.executeAction(action);
+                    makeActionHandler(nav, action).run();
                 }
             }
         }
@@ -748,7 +735,7 @@ public class MainActivity extends AppCompatActivity implements
             final ViewHolder holder;
             Bitmap bitmap;
 
-            public DownloadAsyncTask(String imageURL, ViewHolder holder) {
+            DownloadAsyncTask(String imageURL, ViewHolder holder) {
                 this.imageURL = imageURL;
                 this.holder = holder;
             }
@@ -799,8 +786,7 @@ public class MainActivity extends AppCompatActivity implements
             }
         }
 
-        // Provide a suitable constructor (depends on the kind of dataset)
-        public SSectAdapter(SSect sect) {
+        SSectAdapter(SSect sect) {
             mSect = sect;
         }
 
@@ -810,8 +796,7 @@ public class MainActivity extends AppCompatActivity implements
             // create a new view
             View v = LayoutInflater.from(parent.getContext())
                     .inflate(R.layout.list_child, parent, false);
-            ViewHolder vh = new ViewHolder(v);
-            return vh;
+            return new ViewHolder(v);
         }
 
         // Replace the contents of a view (invoked by the layout manager)
@@ -843,7 +828,12 @@ public class MainActivity extends AppCompatActivity implements
                     holder.action = new Action("enter").add("sectID", sect.guid).add("position", position);
 
                 if (sect.isValue)
-                    holder.editor = new EdtValue(sect, nav, MainActivity.this);
+                    holder.editor = new EdtValue(MainActivity.this, sect, new Action.ActionExecutor() {
+                        @Override
+                        public void executeAction(Action action) {
+                            makeActionHandler(nav, action);
+                        }
+                    });
             }
             holder.tvTitle.setText(title);
             if (holder.action != null) {
@@ -880,128 +870,138 @@ public class MainActivity extends AppCompatActivity implements
         }
     }
 
-    boolean permissionChecked;
-    TextToSpeech tts;
-    final String[] GEN_TTS_LANGS = {"ru", "en"};
-    File tts_dir;
-    ArrayList<String> tts_text_files;
-    String tts_lang;
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    public void runTTS() {
-        if (Looper.getMainLooper().getThread() != Thread.currentThread()) {
-            handler.post(new Runnable() {
-                @Override
-                public void run() {
-                    runTTS();
-                }
-            });
-            return;
+    private static class TTSGenerator {
+        static final String ACTION_GENERATOR_STATUS = "action.tts_status";
+        static boolean permissionChecked;
+        static TTSGenerator instance;
+
+        final Context context;
+        final Handler handler = new Handler(Looper.getMainLooper());
+        TextToSpeech tts;
+        final String[] GEN_TTS_LANGS = {"ru", "en"};
+        File tts_dir;
+        ArrayList<String> tts_text_files;
+        String tts_lang;
+
+        TTSGenerator(Context context) {
+            this.context = context.getApplicationContext();
+            instance = this;
         }
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !permissionChecked) {
-            int res = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-            if (res != PERMISSION_GRANTED) {
-                requestPermissions(new String[]{
-                        Manifest.permission.READ_EXTERNAL_STORAGE,
-                        Manifest.permission.WRITE_EXTERNAL_STORAGE
-                }, 1);
-                return;
-            }
-            permissionChecked = true;
+
+        private void setStatus(String status, String text) {
+            LocalBroadcastManager.getInstance(context).sendBroadcast(
+                    new Intent(ACTION_GENERATOR_STATUS)
+                            .putExtra("status", status)
+                            .putExtra("text", text));
         }
-        if (tts == null) {
-            setStatus("Starting TTS");
-            tts = new TextToSpeech(this, new TextToSpeech.OnInitListener() {
-                @Override
-                public void onInit(int status) {
-                    if (tts.setLanguage(new Locale(tts_lang)) < tts.LANG_AVAILABLE)
-                        throw new RuntimeException("TTS languagre not supported");
-                    Set<Voice> voices = tts.getVoices();
-                    for (Voice v : voices) {
-                        Log.i(TAG, "TTS Voice: " + v);
-                        if (tts_lang.equals("ru") && v.getName().equals("ru-RU-locale"))
-                            tts.setVoice(v);
-                        if (tts_lang.equals("en") && v.getName().equals("en-GB-fis-network")) // en-US-sfg-network en-GB-fis-network
-                            tts.setVoice(v);
+
+        @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+        void runTTS() {
+            if (Looper.getMainLooper().getThread() != Thread.currentThread()) {
+                handler.post(new Runnable() {
+                    @Override
+                    public void run() {
+                        runTTS();
                     }
-                    runTTS();
+                });
+                return;
+            }
+            if (tts == null) {
+                setStatus("Starting TTS", "");
+                tts = new TextToSpeech(context, new TextToSpeech.OnInitListener() {
+                    @Override
+                    public void onInit(int status) {
+                        if (tts.setLanguage(new Locale(tts_lang)) < tts.LANG_AVAILABLE)
+                            throw new RuntimeException("TTS languagre not supported");
+                        Set<Voice> voices = tts.getVoices();
+                        for (Voice v : voices) {
+                            Log.i(TAG, "TTS Voice: " + v);
+                            if (tts_lang.equals("ru") && v.getName().equals("ru-RU-locale"))
+                                tts.setVoice(v);
+                            if (tts_lang.equals("en") && v.getName().equals("en-GB-fis-network")) // en-US-sfg-network en-GB-fis-network
+                                tts.setVoice(v);
+                        }
+                        runTTS();
+                    }
+                });
+                return;
+            }
+            // list TTS files
+            if (tts_text_files == null) {
+                tts_dir = new File(Environment.getExternalStorageDirectory(), "TTS");
+                tts_text_files = new ArrayList<>();
+                for (String fname : tts_dir.list()) {
+                    if (fname.endsWith(tts_lang + ".txt"))
+                        tts_text_files.add(fname.substring(0, fname.length() - 4));
+                }
+            }
+            while (!tts_text_files.isEmpty()) {
+                String fname = tts_text_files.get(0);
+                try {
+                    setStatus(fname, "");
+                    BufferedReader rd = new BufferedReader(new InputStreamReader(
+                            new FileInputStream(new File(tts_dir, fname + ".txt")), "UTF-8"));
+                    ArrayList<String> sentences = new ArrayList<>();
+                    String line;
+                    StringBuilder sb = new StringBuilder();
+                    while ((line = rd.readLine()) != null) {
+                        if (line.isEmpty())
+                            continue;
+                        sentences.add(line);
+                        sb.append(line).append('\n');
+                    }
+                    setStatus(fname, sb.toString());
+                    generateTTSFiles(fname, sentences, 0);
+                    return;
+                } catch (IOException e) {
+                    Log.e(TAG, "Error reading text file for TTS: " + fname + ".txt", e);
+                }
+            }
+            // shutdown TTS
+            setStatus("Shutdown TTS", "");
+            tts.shutdown();
+            tts = null;
+            tts_text_files = null;
+
+            int i = Arrays.binarySearch(GEN_TTS_LANGS, tts_lang);
+            if (i + 1 < GEN_TTS_LANGS.length) {
+                tts_lang = GEN_TTS_LANGS[i + 1];
+                runTTS();
+            } else {
+                tts_lang = null;
+            }
+        }
+
+        @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
+        private void generateTTSFiles(final String fname, final ArrayList<String> list, final int pos) {
+            if (pos >= list.size()) {
+                new File(tts_dir, fname + ".txt").delete();
+                tts_text_files.remove(fname);
+                runTTS();
+                return;
+            }
+            final File file = new File(tts_dir, fname + "." + pos + ".wav");
+            tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
+                @Override
+                public void onStart(String utteranceId) {
+                }
+
+                @Override
+                public void onDone(String utteranceId) {
+                    generateTTSFiles(fname, list, pos + 1);
+                }
+
+                @Override
+                public void onError(String utteranceId) {
+                    file.delete();
+                    generateTTSFiles(fname, list, pos + 1);
                 }
             });
-            return;
+            Bundle params = new Bundle();
+            params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "#" + pos);
+            tts.synthesizeToFile(list.get(pos), null, file, "#" + pos);
+            //tts.speak(list.get(pos), tts.QUEUE_ADD, params, "#"+pos);
         }
-        // list TTS files
-        if (tts_text_files == null) {
-            tts_dir = new File(Environment.getExternalStorageDirectory(), "TTS");
-            tts_text_files = new ArrayList<>();
-            for (String fname : tts_dir.list()) {
-                if (fname.endsWith(tts_lang + ".txt"))
-                    tts_text_files.add(fname.substring(0, fname.length() - 4));
-            }
-        }
-        while (!tts_text_files.isEmpty()) {
-            String fname = tts_text_files.get(0);
-            try {
-                setStatus(fname);
-                BufferedReader rd = new BufferedReader(new InputStreamReader(
-                        new FileInputStream(new File(tts_dir, fname+".txt")), "UTF-8"));
-                ArrayList<String> sentences = new ArrayList<>();
-                String line;
-                StringBuilder sb = new StringBuilder();
-                while ((line = rd.readLine()) != null) {
-                    if (line.isEmpty())
-                        continue;
-                    sentences.add(line);
-                    sb.append(line).append('\n');
-                }
-                tvText.setText(sb.toString());
-                generateTTSFiles(fname, sentences, 0);
-                return;
-            } catch (IOException e) {
-                Log.e(TAG, "Error reading text file for TTS: " + fname+".txt", e);
-            }
-        }
-        // shutdown TTS
-        setStatus("Shutdown TTS");
-        tvText.setText("");
-        tts.shutdown();
-        tts = null;
-        tts_text_files = null;
-
-        int i = Arrays.binarySearch(GEN_TTS_LANGS, tts_lang);
-        if (i+1 < GEN_TTS_LANGS.length) {
-            tts_lang = GEN_TTS_LANGS[i+1];
-            runTTS();
-        } else {
-            tts_lang = null;
-        }
-    }
-
-    @RequiresApi(api = Build.VERSION_CODES.LOLLIPOP)
-    private void generateTTSFiles(final String fname, final ArrayList<String> list, final int pos) {
-        if (pos >= list.size()) {
-            new File(tts_dir, fname+".txt").delete();
-            tts_text_files.remove(fname);
-            runTTS();
-            return;
-        }
-        final File file = new File(tts_dir, fname + "."+pos+".wav");
-        tts.setOnUtteranceProgressListener(new UtteranceProgressListener() {
-            @Override
-            public void onStart(String utteranceId) {
-            }
-            @Override
-            public void onDone(String utteranceId) {
-                generateTTSFiles(fname, list, pos+1);
-            }
-            @Override
-            public void onError(String utteranceId) {
-                file.delete();
-                generateTTSFiles(fname, list, pos+1);
-            }
-        });
-        Bundle params = new Bundle();
-        params.putString(TextToSpeech.Engine.KEY_PARAM_UTTERANCE_ID, "#"+pos);
-        tts.synthesizeToFile(list.get(pos), null, file, "#"+pos);
-        //tts.speak(list.get(pos), tts.QUEUE_ADD, params, "#"+pos);
     }
 
 }

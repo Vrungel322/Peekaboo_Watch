@@ -1,31 +1,34 @@
 package com.skinterface.demo.android;
 
 import android.content.Intent;
+import android.os.Handler;
+import android.os.Looper;
 import android.os.SystemClock;
 import android.util.Log;
+import android.util.SparseArray;
 
 import com.google.android.gms.wearable.MessageEvent;
 import com.google.android.gms.wearable.WearableListenerService;
-
-import java.util.HashMap;
 
 public class RsvpMessageService extends WearableListenerService {
 
     public static final String TAG = "SkinterWatch";
 
-    private static HashMap<Integer, Request> requests = new HashMap<>();
+    public static Handler handler = new Handler(Looper.getMainLooper());
+
+    private static SparseArray<Request> requests = new SparseArray<>();
 
     final static class Request {
         final SrvCallback callback;
         final String responce;
         final long timeout;
 
-        public Request(SrvCallback callback, long timeout) {
+        Request(SrvCallback callback, long timeout) {
             this.callback = callback;
             this.responce = null;
             this.timeout = timeout;
         }
-        public Request(String responce, long timeout) {
+        Request(String responce, long timeout) {
             this.callback = null;
             this.responce = responce;
             this.timeout = timeout;
@@ -41,7 +44,7 @@ public class RsvpMessageService extends WearableListenerService {
             requests.remove(requestId);
             if (req.timeout >= time) {
                 final String responce = req.responce;
-                SiteNavigator.handler.post(new Runnable() {
+                handler.post(new Runnable() {
                     @Override
                     public void run() {
                         callback.onSuccess(responce);
@@ -59,9 +62,9 @@ public class RsvpMessageService extends WearableListenerService {
         if (req != null) {
             long time = SystemClock.uptimeMillis();
             requests.remove(requestId);
-            if (req.timeout >= time) {
+            if (req.timeout >= time && req.callback != null) {
                 final SrvCallback callback = req.callback;
-                SiteNavigator.handler.post(new Runnable() {
+                handler.post(new Runnable() {
                     @Override
                     public void run() {
                         callback.onSuccess(responce);

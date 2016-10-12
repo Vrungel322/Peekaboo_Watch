@@ -1,5 +1,6 @@
 package com.skinterface.demo.android;
 
+import android.os.Bundle;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -9,9 +10,7 @@ import org.json.JSONTokener;
 
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.Map;
 import java.util.UUID;
 
 public class ChatNavigator implements Navigator {
@@ -19,9 +18,7 @@ public class ChatNavigator implements Navigator {
     public static final String TAG = "SkinterPhone";
 
     private static HashMap<String, SSect> chatRooms = new HashMap<>();
-    private SSect wholeMenuTree;
-
-    public final SrvClient client;
+    private static SSect wholeMenuTree;
 
     private String userID;
     private String userName;
@@ -31,17 +28,45 @@ public class ChatNavigator implements Navigator {
     // Current section (maybe the room, or sub-sections for new messages)
     private SSect currentData;
 
-    interface SrvClient {
-        void showMenu(SSect menu);
-        void enterToRoom(SSect sect, int flags);
-        void returnToRoom(SSect sect, int flags);
+    interface Client extends NavClient {
         void sendChatConfirm(final String sender, final String receiver, final String text);
         void sendVoiceConfirm(final String sender, final String receiver);
-        void chatServerCmd(Action action, String data, ChatNavigator nav, SrvCallback callback);
     }
 
-    public ChatNavigator(ChatNavigator.SrvClient client) {
-        this.client = client;
+    public ChatNavigator(Bundle saved) {
+        if (saved != null) {
+            userID = saved.getString("userID");
+            userName = saved.getString("userName");
+            if (saved.containsKey("chatRoom")) {
+                chat_room = chatRooms.get(saved.getString("chatRoom"));
+                if (chat_room != null)
+                    chat_room.currListPosition = saved.getInt("chatPos");
+                currentData = chat_room;
+            }
+            if (saved.containsKey("composing")) {
+                currentData = SSect.fromJson(saved.getString("composing"));
+            }
+        }
+    }
+
+    @Override
+    public void onSaveInstanceState(Bundle outState) {
+        if (userID != null) {
+            outState.putString("userID", userID);
+            outState.putString("userName", userName);
+        }
+        if (chat_room != null) {
+            outState.putString("chatRoom", chat_room.entity.name);
+            outState.putInt("chatPos", chat_room.currListPosition);
+        }
+        if (currentData != currentData) {
+            outState.putString("composing", currentData.fillJson(new JSONObject()).toString());
+        }
+    }
+
+    @Override
+    public SSect siteMenu() {
+        return wholeMenuTree;
     }
 
     @Override
@@ -63,6 +88,34 @@ public class ChatNavigator implements Navigator {
         return currentData.children[i];
     }
 
+    @Override
+    public SSect getSectByGUID(String guid) {
+        if (guid == null || chat_room == null)
+            return null;
+        if (currentData != null && guid.equals(currentData.guid))
+            return currentData;
+        if (guid.equals(chat_room.guid))
+            return chat_room;
+        for (SSect msg : chat_room.children) {
+            if (guid.equals(msg.guid))
+                return msg;
+        }
+        return null;
+    }
+
+    @Override
+    public void setJustShown(int jr_flags) {
+    }
+    @Override
+    public boolean isJustShown(int jr_flag) {
+        return false;
+    }
+    @Override
+    public boolean isEverShown(int jr_flag) {
+        return false;
+    }
+
+
     public String getUserId() {
         return userID;
     }
@@ -81,9 +134,9 @@ public class ChatNavigator implements Navigator {
 
 
     @Override
-    public void doHello() {
+    public void doHello(final NavClient client) {
         Action attach = Action.create("attach");
-        client.chatServerCmd(attach, "", this, new SrvCallback() {
+        client.sendServerCmd(this, attach, new SrvCallback() {
             @Override
             public void onSuccess(String result) {
                 if (result == null || result.length() == 0)
@@ -124,7 +177,7 @@ public class ChatNavigator implements Navigator {
                         makeChatRoom(id, name);
                     }
                     wholeMenuTree.children = children.toArray(new SSect[0]);
-                    client.showMenu(wholeMenuTree);
+                    client.showMenu(ChatNavigator.this, wholeMenuTree);
                 } catch (Exception e) {
                     Log.e(TAG, "Error in parsing peekaboo attach info", e);
                 }
@@ -133,24 +186,24 @@ public class ChatNavigator implements Navigator {
     }
 
     @Override
-    public void doShowMenu() {
+    public void doShowMenu(final NavClient client) {
         if (wholeMenuTree == null)
-            client.showMenu(SiteNavigator.chooseModelMenu);
+            RootNavigator.get().doShowMenu(client);
         else
-            client.showMenu(wholeMenuTree);
+            client.showMenu(this, wholeMenuTree);
     }
 
-    public SSect doEnterToRoom(String partnerId) {
+    public SSect doEnterToRoom(final NavClient client, String partnerId) {
         chat_room = chatRooms.get(partnerId);
         currentData = chat_room;
-        client.enterToRoom(chat_room, FLAG_CAN_EDIT|FLAG_CHAT);
-        client.chatServerCmd(new Action("list-messages").add("id", partnerId), null, null, null);
+        client.enterToRoom(this, chat_room, FLAG_CAN_EDIT|FLAG_CHAT);
+        client.sendServerCmd(this, new Action("list-messages").add("id", partnerId), null);
         return chat_room;
     }
 
-    public void doReturn() {
+    public void doReturn(final NavClient client) {
         currentData = chat_room;
-        client.returnToRoom(currentData, FLAG_CAN_EDIT|FLAG_CHAT);
+        client.returnToRoom(this, currentData, FLAG_CAN_EDIT|FLAG_CHAT);
     }
 
     private void makeChatRoom(String partenrId, String userName) {
@@ -170,22 +223,29 @@ public class ChatNavigator implements Navigator {
         chatRooms.put(partenrId, chat);
     }
 
-    public void composeNewChatMessage(String text) {
+    public void composeNewChatMessage(Client client, String text) {
+        String guid = new StringBuilder()
+                .append("comp").append('-')
+                .append(0).append('-')
+                .append(getUserId()).append('-')
+                .append(getPartnerId())
+                .toString();
         SSect msg = new SSect();
         msg.entity.media = "chat-text-msg";
-        msg.entity.role = "composing";
+        msg.entity.role = "comp";
         msg.entity.name = "unconfirmed";
+        msg.guid = guid;
         msg.title = new SEntity();
         msg.title.media = "text";
         msg.title.data = text;
-        msg.timestamp = System.currentTimeMillis();
+        msg.padd("timestamp", System.currentTimeMillis());
         msg.padd("sender", userID);
         msg.padd("receiver", chat_room.entity.name);
         currentData = msg;
-        client.enterToRoom(msg, FLAG_CAN_SEND|FLAG_CAN_ABORT);
+        client.enterToRoom(this, msg, FLAG_CAN_SEND|FLAG_CAN_ABORT);
     }
 
-    public void composeNewChatMessageResult(boolean confirmed) {
+    public void composeNewChatMessageResult(Client client, boolean confirmed) {
         if (currentData == null)
             return;
         if (!"chat-text-msg".equals(currentData.entity.media))
@@ -194,10 +254,10 @@ public class ChatNavigator implements Navigator {
             return;
         if (confirmed)
             client.sendChatConfirm(userID, chat_room.entity.name, currentData.title.data);
-        doReturn();
+        doReturn(client);
     }
 
-    public static SSect mergeChatMessage(JSONObject jmsg) {
+    public static SSect mergeChatMessage(JSONObject jmsg) throws JSONException {
         boolean own = jmsg.optBoolean("own");
         String partner = own ? jmsg.optString("receiver") : jmsg.optString("sender");;
         if (partner == null || partner.isEmpty())
@@ -208,58 +268,74 @@ public class ChatNavigator implements Navigator {
         if (chat.children == null)
             chat.children = new SSect[0];
 
-        long id = jmsg.optLong("id");
-        long timestamp = jmsg.optLong("timestamp");
-        String receiver = jmsg.optString("receiver");
-        String sender = jmsg.optString("sender");
-        String status = jmsg.optString("status");
+        long id = jmsg.getLong("id");
+        long timestamp = jmsg.getLong("timestamp");
+        String role = own ? "send" : "recv";
+        String receiver = jmsg.getString("receiver").intern();
+        String sender = jmsg.getString("sender").intern();
+        String status = jmsg.getString("status").intern();
+
+        String guid = new StringBuilder()
+                .append(role).append('-')
+                .append(id).append('-')
+                .append(sender).append('-')
+                .append(receiver)
+                .toString();
+
         String text = jmsg.optString("text");
-        if (sender != null) sender = sender.intern();
-        if (receiver != null) receiver = receiver.intern();
         // find this message in the chat, or find insert position
         int ins = -1;
         SSect msg = null;
-        for (int pos=0; pos < chat.children.length; ++pos) {
+        for (int pos=chat.children.length-1; pos >= 0; --pos) {
             SSect old = chat.children[pos];
-            if (old.chatId == id) {
+            if (guid.equals(old.guid)) {
                 msg = old;
                 break;
             }
-            if (ins < 0 && old.timestamp > timestamp)
-                ins = pos;
+            if (ins < 0) {
+                long old_timestamp = Long.parseLong(old.entity.val("timestamp", "0"));
+                if (old_timestamp <= timestamp)
+                    ins = pos + 1;
+            }
         }
         if (msg == null) {
             msg = new SSect();
             msg.entity.media = "chat-text-msg";
-            msg.entity.role = own ? "send" : "recv";
-            msg.entity.name = (status == null) ? null : status.intern();
-            msg.guid = UUID.randomUUID().toString();
+            msg.entity.role = role;
+            msg.entity.name = status;
+            msg.guid = guid;
             msg.title = new SEntity();
             msg.title.media = "text";
             msg.title.data = text;
-            msg.chatId = id;
-            msg.timestamp = timestamp;
+            msg.padd("timestamp", timestamp);
             msg.padd("sender", sender);
             msg.padd("receiver", receiver);
             ArrayList<SSect> lst = new ArrayList<>(Arrays.asList(chat.children));
-            if (ins < 0) {
-                lst.add(msg);
-                if (chat.currListPosition == chat.children.length)
-                    chat.currListPosition += 1;
-            } else {
-                lst.add(ins, msg);
-                if (chat.currListPosition >= ins)
-                    chat.currListPosition += 1;
-            }
+            if (ins < 0)
+                ins = 0;
+            lst.add(ins, msg);
+            if (chat.currListPosition >= ins)
+                chat.currListPosition += 1;
             chat.children = lst.toArray(new SSect[lst.size()]);
         } else {
-            if (msg.timestamp == 0)
-                msg.timestamp = timestamp;
             msg.entity.name = (status == null) ? null : status.intern();
             if (text != null && !text.isEmpty())
                 msg.title.data = text;
         }
         return msg;
+    }
+
+    private UIAction defaultAction;
+    private ArrayList<UIAction> allActions = new ArrayList<>();
+
+    @Override
+    public void fillActions(NavClient client) {
+        final SSect ds = currArticle();
+        allActions = new ArrayList<>();
+        defaultAction = null;
+        if (ds == null)
+            return;
+        client.updateActions(defaultAction, allActions);
     }
 
 }

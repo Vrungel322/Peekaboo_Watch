@@ -25,7 +25,6 @@ public class SSect implements Serializable {
     public SSect[] children; // id,title,descr of children articles
 
     int currListPosition = -1;
-    SSect returnUp;
 
     SSect getCurrChild() {
         if (children == null || currListPosition < 0 || currListPosition >= children.length)

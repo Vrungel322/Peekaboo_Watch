@@ -82,16 +82,12 @@ public class RootNavigator implements Navigator {
     }
 
     @Override
-    public void fillActions(NavClient client) {
+    public void doUserInput(NavClient client, String text) {
     }
 
     @Override
-    public UIAction getDefaultUIAction(int dir) {
+    public UIAction getUIAction(int dir) {
         return null;
     }
 
-    @Override
-    public List<UIAction> getUIActions() {
-        return Collections.emptyList();
-    }
 }

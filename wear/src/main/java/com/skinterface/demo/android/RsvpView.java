@@ -19,10 +19,6 @@ import java.lang.ref.WeakReference;
 public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
 
     public static final String ACTION_RSVP_EVENT     = "action.RSVP_EVENT";
-    public static final String EXTRA_RSVP_STATE      = "state";
-    public static final String RSVP_STATE_LOADED     = "loaded";
-    public static final String RSVP_STATE_STARTED    = "started";
-    public static final String RSVP_STATE_FINISHED   = "finished";
 
     static class RsvpState {
         final RsvpWords words;
@@ -37,6 +33,11 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
             this.tic = tic;
             this.till_time = SystemClock.uptimeMillis() + 4*tic;
             this.playing = playing;
+        }
+
+        @Override
+        public String toString() {
+            return "RsvpState{pos=" + next_pos + '/' + length +", playing=" + playing +'}';
         }
     }
 
@@ -99,12 +100,16 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
 
     @Override
     public void surfaceDestroyed(SurfaceHolder holder) {
-        stop(null);
+        stop(false);
+    }
+
+    RsvpState getRsvpState() {
+        return rsvpState;
     }
 
     void load(final RsvpWords words, boolean play) {
         if (words == null) {
-            stop(null);
+            stop(true);
             return;
         }
         try { setKeepScreenOn(true); } catch (Exception e) {}
@@ -112,11 +117,33 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
         thread.requestStateTransit(RsvpThread.STATE_RSVP);
     }
 
+    void rewind() {
+        RsvpState s = rsvpState;
+        if (s == null)
+            return;
+        try { setKeepScreenOn(false); } catch (Exception e) {}
+        thread.requestStateTransit(RsvpThread.STATE_REWIND);
+    }
+
     boolean isPaused() {
         RsvpState s = rsvpState;
         if (s == null)
             return false;
-        return !s.playing;
+        return !s.playing && s.next_pos < s.length;
+    }
+
+    boolean isPlaying() {
+        RsvpState s = rsvpState;
+        if (s == null)
+            return false;
+        return s.playing;
+    }
+
+    boolean isRewindable() {
+        RsvpState s = rsvpState;
+        if (s == null)
+            return false;
+        return s.length > 0 && s.next_pos > 0;
     }
 
     void resume() {
@@ -127,10 +154,12 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
             return;
         s.playing = true;
         s.till_time = SystemClock.uptimeMillis() + 4 * s.tic;
+        try { setKeepScreenOn(true); } catch (Exception e) {}
         thread.requestStateTransit(RsvpThread.STATE_RSVP);
     }
 
     void pause() {
+        try { setKeepScreenOn(false); } catch (Exception e) {}
         RsvpState s = rsvpState;
         if (s == null)
             return;
@@ -140,18 +169,11 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
         thread.requestStateTransit(RsvpThread.STATE_RSVP);
     }
 
-    void stop(RsvpState s) {
-        if (s == null) {
-            s = rsvpState;
-            if (s == null)
-                return;
-        }
-        if (rsvpState == s) {
+    void stop(boolean clean) {
+        if (clean)
             rsvpState = null;
-            thread.requestStateTransit(RsvpThread.STATE_STOP);
-            if (rsvpState == null)
-                try { setKeepScreenOn(false); } catch (Exception e) {}
-        }
+        try { setKeepScreenOn(false); } catch (Exception e) {}
+        thread.requestStateTransit(RsvpThread.STATE_STOP);
     }
 
     int getTic() {
@@ -223,13 +245,11 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
             if (pos == 0) {
                 if (s.playing) {
                     LocalBroadcastManager.getInstance(getContext()).sendBroadcast(
-                            new Intent(ACTION_RSVP_EVENT)
-                                    .putExtra(EXTRA_RSVP_STATE, RSVP_STATE_STARTED));
+                            new Intent(ACTION_RSVP_EVENT));
                     s.next_pos += 1;
                 } else {
                     LocalBroadcastManager.getInstance(getContext()).sendBroadcast(
-                            new Intent(ACTION_RSVP_EVENT)
-                                    .putExtra(EXTRA_RSVP_STATE, RSVP_STATE_LOADED));
+                            new Intent(ACTION_RSVP_EVENT));
                 }
             }
             else if (s.playing && pos < s.length)
@@ -237,9 +257,8 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
 
             if (pos >= s.length) {
                 //Log.d("rsvp", "play finished with length:"+length);
-                if (s == rsvpState)
-                    rsvpState = null;
-                stop(null);
+                s.playing = false;
+                s.till_time = 0;
                 return rsvpState;
             }
 
@@ -304,10 +323,11 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
 
     static final class RsvpThread extends Thread {
 
-        private static final int STATE_IDLE = 0; // nothing to do
-        private static final int STATE_EXIT = 1; // asked to shutdown
-        private static final int STATE_STOP = 2; // asked to stop, need to draw icons and become idle
-        private static final int STATE_RSVP = 3; // drawing RSVP words
+        private static final int STATE_IDLE   = 0; // nothing to do
+        private static final int STATE_EXIT   = 1; // asked to shutdown
+        private static final int STATE_STOP   = 2; // asked to stop, need to draw icons and become idle
+        private static final int STATE_REWIND = 3; // rewind to the start of RSVP words
+        private static final int STATE_RSVP   = 4; // drawing RSVP words
 
         private final Object lock = new Object();
         private final WeakReference<RsvpView> view_ref;
@@ -349,13 +369,10 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
                 if (mState == old_state) {
                     mState = new_state;
                     lock.notifyAll();
-                    if (new_state == STATE_IDLE) {
-                        RsvpView view = view_ref.get();
-                        if (view != null && old_state == STATE_RSVP)
-                            LocalBroadcastManager.getInstance(view.getContext()).sendBroadcast(
-                                    new Intent(ACTION_RSVP_EVENT)
-                                            .putExtra(EXTRA_RSVP_STATE, RSVP_STATE_FINISHED));
-                    }
+                    RsvpView view = view_ref.get();
+                    if (view != null)
+                        LocalBroadcastManager.getInstance(view.getContext()).sendBroadcast(
+                                new Intent(ACTION_RSVP_EVENT));
                     return true;
                 }
                 return false;
@@ -367,13 +384,10 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
                 mState = new_state;
                 mStateUpdated = true;
                 lock.notifyAll();
-                if (new_state == STATE_IDLE) {
-                    RsvpView view = view_ref.get();
-                    if (view != null)
-                        LocalBroadcastManager.getInstance(view.getContext()).sendBroadcast(
-                                new Intent(ACTION_RSVP_EVENT)
-                                        .putExtra(EXTRA_RSVP_STATE, RSVP_STATE_FINISHED));
-                }
+                RsvpView view = view_ref.get();
+                if (view != null)
+                    LocalBroadcastManager.getInstance(view.getContext()).sendBroadcast(
+                            new Intent(ACTION_RSVP_EVENT));
                 return true;
             }
         }
@@ -394,6 +408,21 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
                     view.drawNextIdle();
                     requestStateTransit(STATE_STOP, STATE_IDLE);
                 }
+                else if (state == STATE_REWIND) {
+                    // get RsvpState or stop
+                    RsvpView view = view_ref.get();
+                    if (view == null)
+                        return;
+                    RsvpState s = view.rsvpState;
+                    if (s == null) {
+                        requestStateTransit(state, STATE_STOP);
+                        continue;
+                    }
+                    s.till_time = SystemClock.uptimeMillis() + 4*s.tic;
+                    s.next_pos = 0;
+                    s.playing = false;
+                    requestStateTransit(state, STATE_RSVP);
+                }
                 else if (state == STATE_RSVP) {
                     // get RsvpState or stop
                     RsvpView view = view_ref.get();
@@ -410,7 +439,9 @@ public class RsvpView extends SurfaceView implements SurfaceHolder.Callback {
                         continue;
                     }
                     s = view.drawNextWord();
-                    if (s == null)
+                    if (s != view.rsvpState)
+                        continue;
+                    else if (s == null || (!s.playing  && s.next_pos >= s.length))
                         requestStateTransit(state, STATE_STOP);
                     else
                         doWait(STATE_RSVP, s.till_time);

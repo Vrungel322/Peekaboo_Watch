@@ -1,17 +1,15 @@
 package com.skinterface.demo.android;
 
 import android.os.Bundle;
+import android.text.TextUtils;
 
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Stack;
 import java.util.concurrent.ConcurrentHashMap;
 
 public class SiteNavigator implements Navigator {
@@ -31,6 +29,8 @@ public class SiteNavigator implements Navigator {
     // Current data
     private SSect currentData;
     private int jr_flags;
+    // Stack of entered rooms
+    private Stack<SSect> eneterPath = new Stack<>();
 
     public interface Client extends NavClient {
         void attachToSite(SiteNavigator nav, SSect menu);
@@ -117,8 +117,10 @@ public class SiteNavigator implements Navigator {
         return (info.jr_flags & jr_flags) != 0;
     }
 
-
+    @Override
     public void doHello(final NavClient client) {
+        currentData = null;
+        eneterPath.clear();
         String lang = Locale.getDefault().getLanguage();
         Action hello = Action.create("hello");
         hello.add("lang", lang);
@@ -178,6 +180,7 @@ public class SiteNavigator implements Navigator {
         client.returnToRoom(this, ds, FLAG_SITE);
     }
 
+    @Override
     public void doShowMenu(final NavClient client) {
         if (wholeMenuTree == null)
             RootNavigator.get().doShowMenu(client);
@@ -185,12 +188,17 @@ public class SiteNavigator implements Navigator {
             client.showMenu(this, wholeMenuTree);
     }
 
+    @Override
     public void doReturn(final NavClient client) {
     }
 
-    public void doDefaultAction(final NavClient client) {
-        if (defaultAction != null)
-            client.makeActionHandler(this, defaultAction.action).run();
+    public void doDefaultAction(final NavClient client, int dir) {
+        //if (defaultAction != null)
+        //    client.makeActionHandler(this, defaultAction.action).run();
+    }
+
+    @Override
+    public void doUserInput(final NavClient client, String text) {
     }
 
 
@@ -255,6 +263,8 @@ public class SiteNavigator implements Navigator {
                         SSect ds = SSect.fromJson(result);
                         if (ds == null)
                             ds = new SSect();
+                        if (nav.currentData != null && !TextUtils.equals(nav.currentData.guid, ds.guid))
+                            nav.eneterPath.push(nav.currentData);
                         nav.doEnterToRoom(client, ds);
                     }
                 });
@@ -278,9 +288,9 @@ public class SiteNavigator implements Navigator {
         }
 
         void returnUp(final SSect ds, final int lp_delta) {
-            if (ds == null || ds.returnUp == null)
+            if (ds == null || nav.eneterPath.isEmpty())
                 return;
-            final SSect up = ds.returnUp;
+            SSect up = nav.eneterPath.peek();
             Action show = new Action("show").add("sectID", up.guid);
             if (up.isValue) {
                 show.setAction("enter");
@@ -290,14 +300,14 @@ public class SiteNavigator implements Navigator {
                 @Override
                 public void onSuccess(String result) {
                     SSect ds = SSect.fromJson(result);
+                    SSect up = nav.eneterPath.pop();
                     if (ds == null) {
                         ds = up;
                     } else {
                         int lp = up.currListPosition + lp_delta;
-                        ds.returnUp = up.returnUp;
                         if (lp < 0 || ds.children == null || lp >= ds.children.length) {
                             ds.currListPosition = -1;
-                            if (lp_delta > 0 && ds.returnUp != null && "auto-next-up".equals(action.getAction())) {
+                            if (lp_delta > 0 && !nav.eneterPath.isEmpty() && "auto-next-up".equals(action.getAction())) {
                                 returnUp(ds, lp_delta);
                                 return;
                             }
@@ -330,7 +340,8 @@ public class SiteNavigator implements Navigator {
                     SSect ds = SSect.fromJson(result);
                     if (ds == null)
                         ds = new SSect();
-                    ds.returnUp = parent;
+                    if (parent != null && !TextUtils.equals(parent.guid, ds.guid))
+                        nav.eneterPath.add(parent);
                     nav.doEnterToRoom(client, ds);
                 }
             });
@@ -338,78 +349,116 @@ public class SiteNavigator implements Navigator {
     }
 
 
-    private UIAction defaultAction;
-    private ArrayList<UIAction> allActions = new ArrayList<>();
-
     @Override
-    public void fillActions(NavClient client) {
-        final SSect ds = currArticle();
-        allActions = new ArrayList<>();
+    public UIAction getUIAction(int dir) {
+        SSect ds = currArticle();
         if (ds == null) {
-            defaultAction = new UIAction("Hello UpStars", "hello");
-            return;
+            if (dir == DEFAULT_ACTION_ENTER)
+                return new UIAction("Hello UpStars", "hello");
+            return null;
         }
-        defaultAction = new UIAction("Guide", "show-menu");
-        {
-            if (ds.returnUp != null)
-                allActions.add(new UIAction("Return Up", "return-up"));
-            if (ds.returnUp != null && ds.currListPosition < 0) {
-                SSect up = ds.returnUp;
-                SSect[] ch = up.children;
-                if (ch != null && up.currListPosition >= 0) {
-                    //boolean has_prev = (up.currListPosition > 0);
-                    //boolean has_next = (up.currListPosition < ch.length - 1);
-                    //currActions.add(SSect.makeAction("PREV", has_prev ? "sibling-prev" : "none"));
-                    //currActions.add(SSect.makeAction("NEXT", has_next ? "sibling-next" : "none"));
-                    defaultAction = new UIAction("UP+Next", "auto-next-up");
-                }
-            }
-            if (ds.descr != null)
-                allActions.add(new UIAction("Describe", "descr"));
-            if (ds.hasArticle) {
-                if (!ds.nextAsSkip && !isJustShown(JR_ARTICLE))
-                    defaultAction = new UIAction("Read", "read");
-                //currActions.add(SSect.makeAction("Read", "read"));
-            }
-            if (ds.children != null && ds.children.length > 0) {
-                if (!ds.nextAsSkip || ds.returnUp == null) {
-                    if (!isJustShown(JR_LIST)) {
-                        defaultAction = new UIAction("List", "list");
-                    } else {
-                        for (int position=0; position < ds.children.length; ++position) {
-                            SSect child = ds.children[position];
-                            if (child.isAction) {
-                                defaultAction = new UIAction(child).padd("position", position);
-                                break;
-                            }
-                            else if (child.hasArticle || child.hasChildren || child.children != null) {
-                                defaultAction = new UIAction("Enter", "enter").padd("sectID", child.guid).padd("position", position);
-                                break;
-                            }
-                        }
+        if (ds.currListPosition < 0 || ds.children == null || ds.children.length == 0) {
+            // not in child list, act on the main article
+            if (dir == DEFAULT_ACTION_ENTER) {
+                if (ds.isAction) {
+                    UIAction action = new UIAction("Go to", ds.entity.data);
+                    if (ds.entity.props != null) {
+                        for (String key : ds.entity.props.keySet())
+                            action.padd(key, ds.entity.val(key));
                     }
+                    return action;
                 }
-                //if ((justRead & RsvpWords.JR_LIST) == 0)
-                //    currActions.add(SSect.makeAction("List", "list"));
+                if (ds.isValue)
+                    return new UIAction("Edit", "edit");
+                if (ds.hasArticle)
+                    return new UIAction("Read", "read");
+                if (ds.isAction)
+                    return new UIAction("Exec", "exec");
+                if (ds.children != null && ds.children.length > 0)
+                    return new UIAction("List", "list");
+                return new UIAction("Guide", "show-menu");
             }
-            if (ds.isAction) {
-                //currActions.add(ds);
-                defaultAction = new UIAction(ds).prependTitle("Go to ");
+            if (dir == DEFAULT_ACTION_LEAVE) {
+                if (!eneterPath.isEmpty())
+                    return new UIAction("UP", "return-up");
+            }
+            if (dir == DEFAULT_ACTION_NEXT) {
+                if (!eneterPath.isEmpty()) {
+                    SSect up = eneterPath.peek();
+                    SSect[] ch = up.children;
+                    if (ch != null && up.currListPosition >= 0)
+                        return new UIAction("UP+Next", "auto-next-up");
+                }
+            }
+            if (dir == DEFAULT_ACTION_PREV) {
+                if (!eneterPath.isEmpty()) {
+                    SSect up = eneterPath.peek();
+                    SSect[] ch = up.children;
+                    if (ch != null && up.currListPosition >= 0)
+                        return new UIAction("UP+Next", "auto-prev-up");
+                }
             }
         }
-        client.updateActions(this, allActions);
-    }
-
-
-    @Override
-    public UIAction getDefaultUIAction(int dir) {
-        if (dir == DEFAULT_ACTION_FORW)
-            return defaultAction;
+        else if (ds.currListPosition >= ds.children.length) {
+            // past the end of child list
+            if (dir == DEFAULT_ACTION_LEAVE) {
+                return new UIAction("Describe", "descr");
+            }
+            if (dir == DEFAULT_ACTION_NEXT) {
+                if (!eneterPath.isEmpty()) {
+                    SSect up = eneterPath.peek();
+                    SSect[] ch = up.children;
+                    if (ch != null && up.currListPosition >= 0)
+                        return new UIAction("UP+Next", "auto-next-up");
+                    else
+                        return new UIAction("UP", "return-up");
+                }
+            }
+            if (dir == DEFAULT_ACTION_PREV) {
+                return new UIAction("Previous", "prev");
+            }
+        }
+        else {
+            SSect child = ds.getCurrChild();
+            // in the middle of child list
+            if (dir == DEFAULT_ACTION_ENTER) {
+                if (child.isAction) {
+                    UIAction action = new UIAction("Go to", child.entity.data);
+                    if (child.entity.props != null) {
+                        for (String key : child.entity.props.keySet())
+                            action.padd(key, child.entity.val(key));
+                    }
+                    return action;
+                }
+                else if (child.isValue)
+                    return new UIAction("Edit", "edit").padd("vname", ds.entity.name);
+                else if (child.hasArticle || child.hasChildren || child.children != null)
+                    return new UIAction("Enter", "enter").padd("sectID", child.guid);
+            }
+            if (dir == DEFAULT_ACTION_LEAVE) {
+                return new UIAction("Describe", "descr");
+            }
+            if (dir == DEFAULT_ACTION_NEXT) {
+                if (ds.currListPosition < ds.children.length-1)
+                    return new UIAction("Next", "next");
+                if (!eneterPath.isEmpty()) {
+                    SSect up = eneterPath.peek();
+                    SSect[] ch = up.children;
+                    if (ch != null && up.currListPosition >= 0 && !up.nextAsSkip)
+                        return new UIAction("UP+Next", "auto-next-up");
+                }
+            }
+            if (dir == DEFAULT_ACTION_PREV) {
+                if (ds.currListPosition > 0)
+                    return new UIAction("Prev", "prev");
+                if (!eneterPath.isEmpty()) {
+                    SSect up = eneterPath.peek();
+                    SSect[] ch = up.children;
+                    if (ch != null && up.currListPosition >= 0 && !up.nextAsSkip)
+                        return new UIAction("UP+Next", "auto-prev-up");
+                }
+            }
+        }
         return null;
-    }
-
-    @Override
-    public List<UIAction> getUIActions() {
-        return allActions;
     }
 }

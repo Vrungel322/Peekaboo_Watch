@@ -1,6 +1,7 @@
 package com.skinterface.demo.android;
 
 import android.os.Bundle;
+import android.text.TextUtils;
 import android.util.Log;
 
 import org.json.JSONArray;
@@ -202,9 +203,16 @@ public class ChatNavigator implements Navigator {
         return chat_room;
     }
 
+    @Override
     public void doReturn(final NavClient client) {
         currentData = chat_room;
         client.returnToRoom(this, currentData, FLAG_CAN_EDIT|FLAG_CHAT);
+    }
+
+    @Override
+    public void doUserInput(final NavClient client, String text) {
+        if (client instanceof Client && !TextUtils.isEmpty(text))
+            composeNewChatMessage((Client) client, text);
     }
 
     private void makeChatRoom(String partenrId, String userName) {
@@ -327,41 +335,33 @@ public class ChatNavigator implements Navigator {
     }
 
     @Override
-    public void fillActions(NavClient client) {
-        client.updateActions(this, Collections.EMPTY_LIST);
-    }
-
-    @Override
-    public UIAction getDefaultUIAction(int dir) {
+    public UIAction getUIAction(int dir) {
         if (chat_room == null) {
-            if (dir == DEFAULT_ACTION_DOWN)
+            if (dir == DEFAULT_ACTION_ENTER)
                 return new UIAction("Chat Room", "show-menu");
             return null;
         }
         if (currentData == chat_room) {
-            if (dir == DEFAULT_ACTION_DOWN)
+            if (dir == DEFAULT_ACTION_ENTER)
                 return new UIAction("New Message", "edit");
-            if (dir == DEFAULT_ACTION_FORW) {
+            if (dir == DEFAULT_ACTION_NEXT) {
                 if (currentData.currListPosition < currentData.children.length)
-                    return new UIAction("Play", "play");
+                    return new UIAction("Next", "next");
             }
             return null;
         }
         if (currentData != null && "comp".equals(currentData.entity.role)) {
             // composing a message
-            if (dir == DEFAULT_ACTION_DOWN)
+            if (dir == DEFAULT_ACTION_ENTER)
                 return new UIAction("Send Message", "send");
-            if (dir == DEFAULT_ACTION_FORW)
-                return new UIAction("Play", "play");
-            if (dir == DEFAULT_ACTION_BACK)
+            if (dir == DEFAULT_ACTION_LEAVE)
+                return new UIAction("Close", "close");
+            if (dir == DEFAULT_ACTION_NEXT)
+                return new UIAction("Play", "replay");
+            if (dir == DEFAULT_ACTION_PREV)
                 return new UIAction("Close", "close");
             return null;
         }
         return null;
-    }
-
-    @Override
-    public List<UIAction> getUIActions() {
-        return Collections.emptyList();
     }
 }

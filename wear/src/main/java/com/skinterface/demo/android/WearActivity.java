@@ -193,11 +193,6 @@ public class WearActivity extends WearableActivity implements
         return handled || super.onTouchEvent(event);
     }
 
-    public void stopCurrentSect() {
-        RsvpFragment fr = getRsvpFragment();
-        if (fr != null)
-            fr.stop();
-    }
     public void mergeChatMessage(JSONObject jmsg) {
         try {
             SSect msg = ChatNavigator.mergeChatMessage(jmsg);
@@ -206,16 +201,6 @@ public class WearActivity extends WearableActivity implements
         } catch (JSONException e) {
             Log.e(TAG, "Bad chat message", e);
         }
-    }
-
-    public void composeNewChatMessage(String text) {
-        if (nav instanceof ChatNavigator)
-            ((ChatNavigator) nav).composeNewChatMessage(this, text);
-    }
-
-    public void composeNewChatMessageResult(boolean confirmed) {
-        if (nav instanceof ChatNavigator)
-            ((ChatNavigator) nav).composeNewChatMessageResult(this, confirmed);
     }
 
     @Override
@@ -271,7 +256,9 @@ public class WearActivity extends WearableActivity implements
                 ArrayList<String> results = data.getStringArrayListExtra(
                         RecognizerIntent.EXTRA_RESULTS);
                 if (results != null && !results.isEmpty())
-                    composeNewChatMessage(results.get(0));
+                    nav.doUserInput(this, results.get(0));
+            } else {
+
             }
         }
         else if (requestCode == AUDIO_REQUEST_CODE) {
@@ -293,7 +280,7 @@ public class WearActivity extends WearableActivity implements
     @Override
     protected void onPause() {
         super.onPause();
-        stopCurrentSect();
+        getRsvpFragment().stop(false);
     }
 
     @Override
@@ -314,7 +301,7 @@ public class WearActivity extends WearableActivity implements
     public void onEnterAmbient(Bundle ambientDetails) {
         super.onEnterAmbient(ambientDetails);
         updateDisplay();
-        stopCurrentSect();
+        getRsvpFragment().stop(true);
     }
 
     @Override
@@ -482,7 +469,7 @@ public class WearActivity extends WearableActivity implements
 
     @Override
     public void showMenu(Navigator nav, final SSect menu) {
-        stopCurrentSect();
+        getRsvpFragment().stop(false);
         if (menu == null)
             return;
         if (menu.children != null && menu.children.length > 0)
@@ -653,15 +640,13 @@ public class WearActivity extends WearableActivity implements
         }
         public void run() {
             String act = action.getAction();
-            if ("list".equals(act)) {
+            if ("show-menu".equals(act)) {
+                nav.doShowMenu(client);
             }
-            else if ("descr".equals(act)) {
+            else if ("edit".equals(act)) {
+                startVoiceRecognition();
             }
-            else if ("read".equals(act)) {
-            }
-            else {
-                super.run();
-            }
+            super.run();
         }
     }
     protected class ChatActionHandler extends ActionHandler {

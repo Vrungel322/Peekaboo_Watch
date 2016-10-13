@@ -67,7 +67,11 @@ public class RsvpFragment extends Fragment implements
         @Override
         public void onReceive(Context context, Intent intent) {
             if (RsvpView.ACTION_RSVP_EVENT.equals(intent.getAction())) {
-                String state = intent.getStringExtra(RsvpView.EXTRA_RSVP_STATE);
+                RsvpView.RsvpState rsvpState = null;
+                if (mRsvpView != null)
+                    rsvpState = mRsvpView.getRsvpState();
+                Log.d(TAG, "rsvp event: " + rsvpState);
+                updatePlayButton();
                 updatePosView();
             }
         }
@@ -76,7 +80,8 @@ public class RsvpFragment extends Fragment implements
     private Rect rect = new Rect();
 
     WearActivity activity;
-    UIAction mRecordAction;
+    UIAction mEnterAction;
+    UIAction mLeaveAction;
     UIAction mNextAction;
     UIAction mPrevAction;
     RsvpView mRsvpView;
@@ -176,15 +181,16 @@ public class RsvpFragment extends Fragment implements
     public void onPause() {
         super.onPause();
         if (mRsvpView != null)
-            mRsvpView.stop(null);
+            mRsvpView.stop(false);
     }
 
     private void setImageResource(View btn, int id) {
+        if (id != 0)
+            btn.setVisibility(View.VISIBLE);
         if (btn instanceof ImageView) {
             ((ImageView) btn).setImageResource(id);
-            return;
         }
-        if (btn instanceof CircularButton) {
+        else if (btn instanceof CircularButton) {
             if (id == 0)
                 ((CircularButton) btn).setImageDrawable(null);
             else
@@ -192,10 +198,62 @@ public class RsvpFragment extends Fragment implements
         }
     }
 
+    private void setImageResource(View btn, String action) {
+        if (action == null || action.isEmpty()) {
+            setImageResource(btn, 0);
+            return;
+        }
+        switch (action) {
+        case "hello":     setImageResource(btn, R.drawable.ic_flare); return;
+        case "show-menu":
+            if ((flags & NAV_MODE) == NAV_CHAT)
+                setImageResource(btn, R.drawable.ic_chat);
+            else
+                setImageResource(btn, R.drawable.ic_flare);
+            return;
+        case "edit":      setImageResource(btn, R.drawable.ic_record); return;
+        case "record":    setImageResource(btn, R.drawable.ic_record); return;
+        case "send":      setImageResource(btn, R.drawable.ic_send); return;
+        case "play":      setImageResource(btn, R.drawable.ic_play); return;
+        case "pause":     setImageResource(btn, R.drawable.ic_pause); return;
+        case "replay":    setImageResource(btn, R.drawable.ic_replay); return;
+        case "close":     setImageResource(btn, R.drawable.ic_close); return;
+        case "return":    setImageResource(btn, R.drawable.ic_return); return;
+        case "enter":     setImageResource(btn, R.drawable.ic_enter); return;
+        case "read":      setImageResource(btn, R.drawable.ic_enter); return;
+        case "list":      setImageResource(btn, R.drawable.ic_enter); return;
+        case "next":      setImageResource(btn, R.drawable.ic_nav_next); return;
+        case "prev":      setImageResource(btn, R.drawable.ic_nav_prev); return;
+        case "auto-next-up": setImageResource(btn, R.drawable.ic_nav_next_over); return;
+        case "auto-prev-up": setImageResource(btn, R.drawable.ic_nav_prev_over); return;
+        default:          setImageResource(btn, R.drawable.ic_exec); return;
+        }
+    }
+
+    private void setImageResource(View btn, UIAction action) {
+        if (action == null)
+            setImageResource(btn, 0);
+        else
+            setImageResource(btn, action.getAct());
+    }
+
+    private void updatePlayButton() {
+        if (mRsvpView == null)
+            return;
+        RsvpView.RsvpState rsvpState = mRsvpView.getRsvpState();
+        if (rsvpState == null || rsvpState.length == 0 || rsvpState.next_pos >= rsvpState.length)
+            setImageResource(mNextButton, mNextAction);
+        else if (!rsvpState.playing)
+            setImageResource(mNextButton, R.drawable.ic_play);
+        else
+            setImageResource(mNextButton, R.drawable.ic_pause);
+    }
+
     private void updateButtons() {
         Navigator nav = activity.nav;
         if (nav == null) {
-            mRecordAction = null;
+            mEnterAction = null;
+            mLeaveAction = null;
             mNextAction = null;
             mPrevAction = null;
             mDownButton.setVisibility(View.INVISIBLE);
@@ -204,20 +262,13 @@ public class RsvpFragment extends Fragment implements
             mNextButton.setVisibility(View.INVISIBLE);
             return;
         }
-        mRecordAction = nav.getDefaultUIAction(Navigator.DEFAULT_ACTION_DOWN);
-        mNextAction = nav.getDefaultUIAction(Navigator.DEFAULT_ACTION_FORW);
-        mPrevAction = nav.getDefaultUIAction(Navigator.DEFAULT_ACTION_BACK);
+        mEnterAction = nav.getUIAction(Navigator.DEFAULT_ACTION_ENTER);
+        mLeaveAction = nav.getUIAction(Navigator.DEFAULT_ACTION_LEAVE);
+        mNextAction = nav.getUIAction(Navigator.DEFAULT_ACTION_NEXT);
+        mPrevAction = nav.getUIAction(Navigator.DEFAULT_ACTION_PREV);
 
-        if (mRecordAction != null) {
-            String act = mRecordAction.action.getAction();
-            if ("show-menu".equals(act))
-                setImageResource(mDownButton, R.drawable.ic_chat);
-            else if ("edit".equals(act))
-                setImageResource(mDownButton, R.drawable.ic_record);
-            else if ("send".equals(act))
-                setImageResource(mDownButton, R.drawable.ic_send);
-            else
-                setImageResource(mDownButton, 0);
+        setImageResource(mDownButton, mEnterAction);
+        if (mEnterAction != null) {
             mDownButton.setVisibility(View.VISIBLE);
             mDownBgView.setVisibility(View.VISIBLE);
         } else {
@@ -225,34 +276,24 @@ public class RsvpFragment extends Fragment implements
             mDownBgView.setVisibility(View.INVISIBLE);
         }
 
-        if (mNextAction != null) {
-            String act = mNextAction.action.getAction();
-            if ("play".equals(act))
-                setImageResource(mNextButton, R.drawable.ic_play);
-            else
-                setImageResource(mNextButton, 0);
+        setImageResource(mNextButton, mNextAction);
+        if (mNextAction != null)
             mNextButton.setVisibility(View.VISIBLE);
-        } else {
+        else
             mNextButton.setVisibility(View.INVISIBLE);
-        }
 
-        if (mPrevAction != null) {
-            String act = mPrevAction.action.getAction();
-            if ("close".equals(act))
-                setImageResource(mPrevButton, R.drawable.ic_close);
-            else
-                setImageResource(mPrevButton, 0);
+        setImageResource(mPrevButton, mPrevAction);
+        if (mPrevAction != null)
             mPrevButton.setVisibility(View.VISIBLE);
-        } else {
+        else
             mPrevButton.setVisibility(View.INVISIBLE);
-        }
     }
 
     public void load(SSect sect, int flags, boolean play) {
         if (this.sect == sect && sect != null)
             return;
         if (mRsvpView != null)
-            mRsvpView.stop(null);
+            mRsvpView.load(null, false);
         this.sect = sect;
         this.words = null;
         this.flags = flags;
@@ -303,10 +344,10 @@ public class RsvpFragment extends Fragment implements
         updatePosView();
     }
 
-    public void stop() {
+    public void stop(boolean clean) {
         this.words = null;
         if (mRsvpView != null)
-            mRsvpView.stop(null);
+            mRsvpView.stop(clean);
         if (mPositionView != null)
             mPositionView.setText("");
     }
@@ -450,32 +491,6 @@ public class RsvpFragment extends Fragment implements
 
     private void updateActions() {
         updateButtons();
-        if ((flags & NAV_MODE) == NAV_SITE) {
-            int vis = View.INVISIBLE;
-            if (sect == null)
-                ;
-            else if (state == STATE_CHILD && sect.children != null && sect.children.length > 0) {
-                if (sect.currListPosition >= 0 && sect.currListPosition <= sect.children.length) {
-                    SSect child = sect.children[sect.currListPosition];
-                    if (child.hasArticle || child.hasChildren) {
-                        setImageResource(mDownButton, R.drawable.ic_enter);
-                        vis = View.VISIBLE;
-                    }
-                }
-            }
-            else if (state == STATE_INIT || state == STATE_DONE) {
-                if (sect.hasArticle) {
-                    setImageResource(mDownButton, R.drawable.ic_enter);
-                    vis = View.VISIBLE;
-                }
-                else if (sect.children != null && sect.children.length > 0) {
-                    setImageResource(mDownButton, R.drawable.ic_enter);
-                    vis = View.VISIBLE;
-                }
-            }
-            mDownButton.setVisibility(vis);
-            mDownBgView.setVisibility(vis);
-        }
     }
 
 
@@ -494,12 +509,12 @@ public class RsvpFragment extends Fragment implements
         if (sect == null) {
             state = STATE_DONE;
             cguid = null;
-            mRsvpView.stop(null);
+            mRsvpView.stop(true);
             mPositionView.setText(getSpeedString());
             return;
         }
         if (state == STATE_INIT || state == STATE_DONE) {
-            mRsvpView.stop(null);
+            mRsvpView.stop(true);
             mRsvpView.load(words, play);
             return;
         }
@@ -540,7 +555,7 @@ public class RsvpFragment extends Fragment implements
         if (sect == null) {
             state = STATE_DONE;
             cguid = null;
-            mRsvpView.stop(null);
+            mRsvpView.stop(true);
             mPositionView.setText(getSpeedString());
             updateActions();
             return;
@@ -612,7 +627,7 @@ public class RsvpFragment extends Fragment implements
             } else {
                 cguid = CHILD_POS_END;
                 sect.currListPosition = sect.children.length;
-                mRsvpView.stop(null);
+                mRsvpView.stop(false);
                 updatePosView();
             }
             updateActions();
@@ -629,12 +644,15 @@ public class RsvpFragment extends Fragment implements
         if (sect == null) {
             state = STATE_DONE;
             cguid = null;
-            mRsvpView.stop(null);
+            mRsvpView.stop(true);
             mPositionView.setText("");
             updateActions();
             return;
         }
-
+        //if (mRsvpView.isRewindable()) {
+        //    mRsvpView.rewind();
+        //    return;
+        //}
         if (state == STATE_CHILD) {
             int pos = sect.currListPosition - 1;
             if (pos >= sect.children.length)
@@ -654,7 +672,7 @@ public class RsvpFragment extends Fragment implements
             else if ((flags & NAV_MODE) == NAV_CHAT) {
                 sect.currListPosition = -1;
                 cguid = null;
-                mRsvpView.stop(null);
+                mRsvpView.stop(false);
                 updatePosView();
                 updateActions();
                 return;
@@ -679,7 +697,7 @@ public class RsvpFragment extends Fragment implements
         }
         state = STATE_INIT;
         cguid = null;
-        mRsvpView.stop(null);
+        mRsvpView.stop(false);
         updatePosView();
         updateActions();
     }
@@ -689,44 +707,86 @@ public class RsvpFragment extends Fragment implements
         updatePosView();
     }
 
-    private void doClick(int id) {
+
+    private boolean doSimpleNav(Action action, boolean autoplay) {
+        if (action == null || sect == null)
+            return false;
+        String act = action.getAction();
+        if ("list".equals(act)) {
+            if (sect.children != null && sect.children.length > 0)
+                toChild(0, autoplay);
+            return true;
+        }
+        else if ("read".equals(act)) {
+            if (sect.hasArticle) {
+                state = STATE_ARTICLE;
+                onRepeat(autoplay);
+            }
+            return true;
+        }
+        else if ("descr".equals(act)) {
+            state = STATE_TITLE;
+            onRepeat(autoplay);
+            return true;
+        }
+        else if ("next".equals(act)) {
+            onNext(autoplay);
+            return true;
+        }
+        else if ("prev".equals(act)) {
+            onPrev();
+            return true;
+        }
+        else if ("replay".equals(act)) {
+            onRepeat(autoplay);
+            return true;
+        }
+        return false;
+    }
+
+    private void doAction(int id, boolean button, boolean autoplay) {
         if (id == R.id.record) {
-            if (mRecordAction != null) {
-                activity.makeActionHandler(activity.nav, mRecordAction.action).run();
+            if (mEnterAction != null) {
+                if (!doSimpleNav(mEnterAction.action, autoplay))
+                    activity.makeActionHandler(activity.nav, mEnterAction.action).run();
                 return;
             }
-
-            if ((flags & NAV_MODE) == NAV_SITE) {
-                if (state == STATE_CHILD && sect.children != null && sect.children.length > 0) {
-                    if (sect.currListPosition >= 0 && sect.currListPosition <= sect.children.length) {
-                        SSect child = sect.children[sect.currListPosition];
-                        if (child.hasArticle || child.hasChildren) {
-                            Action action = new Action("enter").add("sectID", child.guid);
-                            activity.makeActionHandler(activity.nav, action).run();
-                        }
-                    }
-                }
-                else if (state == STATE_INIT || state == STATE_DONE) {
-                    if (sect.hasArticle) {
-                        state = STATE_ARTICLE;
-                        onRepeat(true);
-                        return;
-                    }
-                    else if (sect.children != null && sect.children.length > 0) {
-                        state = STATE_CHILD;
-                        toChild(0, false);
-                        return;
-                    }
-                }
+        }
+        if (id == R.id.title) {
+            if (mLeaveAction != null) {
+                if (!doSimpleNav(mLeaveAction.action, autoplay))
+                    activity.makeActionHandler(activity.nav, mLeaveAction.action).run();
+                return;
             }
         }
         if (id == R.id.prev) {
-            if (mPrevAction != null) {
-                activity.makeActionHandler(activity.nav, mPrevAction.action).run();
+            if (!button && mRsvpView != null && mRsvpView.isRewindable()) {
+                mRsvpView.rewind();
                 return;
             }
+            if (mPrevAction != null) {
+                if (!doSimpleNav(mPrevAction.action, autoplay))
+                    activity.makeActionHandler(activity.nav, mPrevAction.action).run();
+                return;
+            }
+            onPrev();
         }
         if (id == R.id.next) {
+            if (button && mRsvpView != null) {
+                if (mRsvpView.isPlaying()) {
+                    mRsvpView.pause();
+                    return;
+                }
+                if (mRsvpView.isPaused()) {
+                    mRsvpView.resume();
+                    return;
+                }
+            }
+            if (mNextAction != null) {
+                if (!doSimpleNav(mNextAction.action, autoplay))
+                    activity.makeActionHandler(activity.nav, mNextAction.action).run();
+                return;
+            }
             onNext(true);
         }
         if (id == R.id.chat_message_new) {
@@ -743,13 +803,13 @@ public class RsvpFragment extends Fragment implements
 
     @Override
     public void onClick(View v) {
-        doClick(v.getId());
+        doAction(v.getId(), true, true);
     }
 
     @Override
     public boolean onLongClick(View v) {
         if (v.getId() == R.id.record) {
-            if (mRecordAction != null && "edit".equals(mRecordAction.action.getAction())) {
+            if (mEnterAction != null && "edit".equals(mEnterAction.action.getAction())) {
                 ((WearActivity) getActivity()).startVoiceRecording();
                 return true;
             }
@@ -785,12 +845,15 @@ public class RsvpFragment extends Fragment implements
         }
         if (vx > vy*5/4) {
             if (RtoL)
-                onNext(false);
+                doAction(R.id.next, false, false);
             else
-                onPrev();
+                doAction(R.id.prev, false, false);
         }
         else if (vy > vx*5/4) {
-
+            if (BtoT)
+                doAction(R.id.title, false, false);
+            else
+                doAction(R.id.record, false, false);
         }
         return true;
     }
@@ -818,8 +881,8 @@ public class RsvpFragment extends Fragment implements
         int cx = 480/2;
         int cy = 480-70+32;
         int d2 = (cx-x)*(cx-x) + (cy-y)*(cy-y);
-        if (d2 < r*r || y > (480-84)) {
-            if (mRecordAction != null && "edit".equals(mRecordAction.action.getAction())) {
+        if (d2 < r*r || y > (480-94)) {
+            if (mEnterAction != null && "edit".equals(mEnterAction.action.getAction())) {
                 ((WearActivity) getActivity()).startVoiceRecording();
                 return;
             }
@@ -884,20 +947,20 @@ public class RsvpFragment extends Fragment implements
         int cx = 480/2;
         int cy = 480-70+32;
         int d2 = (cx-x)*(cx-x) + (cy-y)*(cy-y);
-        if (d2 < r*r || y > (480-84)) {
-            doClick(R.id.record);
+        if (d2 < r*r || y > (480-94)) {
+            doAction(R.id.record, true, true);
             return true;
         }
 
         // check 'next' button pressed
-        if (y > 272 && y < (480-84) && x > 280) {
-            doClick(R.id.next);
+        if (y > 272 && y < (480-94) && x > 280) {
+            doAction(R.id.next, true, true);
             return true;
         }
 
         // check 'prev' button pressed
-        if (y > 272 && y < (480-84) && x < 200) {
-            doClick(R.id.prev);
+        if (y > 272 && y < (480-94) && x < 200) {
+            doAction(R.id.prev, true, true);
             return true;
         }
 

@@ -14,9 +14,14 @@ public interface Navigator {
     int FLAG_CHAT       = 0x100;
     int FLAG_SITE       = 0x200;
 
-    int DEFAULT_ACTION_FORW = 0;
-    int DEFAULT_ACTION_BACK = 1;
-    int DEFAULT_ACTION_DOWN = 2;
+    // Action for right button (when it's not in 'play/pause' state) and swipe right-to-left action
+    int DEFAULT_ACTION_NEXT  = 0;
+    // Action for left button (when it's not in 'more/menu' state) and swipe left-to-right action
+    int DEFAULT_ACTION_PREV  = 1;
+    // Action for down button and swipe top-to-down action
+    int DEFAULT_ACTION_ENTER = 2;
+    // Action for up/return button and swipe down-to-top action
+    int DEFAULT_ACTION_LEAVE = 3;
 
     // Just-read Title
     public static final int JR_TITLE   = 0x0001;
@@ -64,8 +69,7 @@ public interface Navigator {
     void doHello(NavClient client);
     void doShowMenu(NavClient client);
     void doReturn(NavClient client);
+    void doUserInput(NavClient client, String text);
 
-    void fillActions(NavClient client);
-    UIAction getDefaultUIAction(int dir);
-    List<UIAction> getUIActions();
+    UIAction getUIAction(int dir);
 }

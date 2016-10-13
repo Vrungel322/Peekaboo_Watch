@@ -302,7 +302,7 @@ public class MainActivity extends AppCompatActivity implements
             return true;
         }
         if (id == R.id.sf_next_auto) {
-            nav.doDefaultAction(this);
+            nav.doDefaultAction(this, Navigator.DEFAULT_ACTION_NEXT);
             return true;
         }
         if (id == R.id.sf_return_up) {
@@ -398,7 +398,7 @@ public class MainActivity extends AppCompatActivity implements
     public void updateActions(Navigator nav, List<UIAction> actions) {
         setButtonEnabled(R.id.sf_return_up, hasAction("return-up", actions));
         setButtonEnabled(R.id.sf_descr,     hasAction("descr", actions));
-        UIAction dflt = nav.getDefaultUIAction(Navigator.DEFAULT_ACTION_FORW);
+        UIAction dflt = nav.getUIAction(Navigator.DEFAULT_ACTION_NEXT);
         if (dflt == null) {
             btnForward.setVisibility(View.GONE);
         } else {
@@ -486,7 +486,6 @@ public class MainActivity extends AppCompatActivity implements
                 introSetShown(ds, true);
                 ds.currListPosition = -1;
                 play(words);
-                nav.fillActions(client);
                 stopVoice();
                 playVoice(ds.title);
                 playVoice(ds.descr);
@@ -505,7 +504,6 @@ public class MainActivity extends AppCompatActivity implements
                     playVoice(ds.descr);
                 }
                 play(words);
-                nav.fillActions(client);
             }
             else {
                 super.run();
@@ -575,7 +573,6 @@ public class MainActivity extends AppCompatActivity implements
                 nav.setJustShown(Navigator.JR_LIST);
             }
         }
-        nav.fillActions(this);
     }
 
     @Override
@@ -636,7 +633,6 @@ public class MainActivity extends AppCompatActivity implements
         play(words);
         if (rvChildren.getVisibility() == View.VISIBLE)
             nav.setJustShown(Navigator.JR_LIST);
-        nav.fillActions(this);
     }
 
     @Override

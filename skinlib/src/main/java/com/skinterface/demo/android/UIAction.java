@@ -16,6 +16,10 @@ public class UIAction {
         this(title, new Action(action));
     }
 
+    public String getAct() {
+        return action.getAction();
+    }
+
     public UIAction(SSect sect) {
         title = "";
         action = new Action(sect.entity.data);

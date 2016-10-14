@@ -1,12 +1,18 @@
 package com.skinterface.demo.android;
 
+import android.content.Context;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.text.TextUtils;
 
+import com.skinterface.demo.android.lib.R;
+
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.json.JSONTokener;
 
+import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Stack;
@@ -199,7 +205,102 @@ public class SiteNavigator implements Navigator {
 
     @Override
     public void doUserInput(final NavClient client, String text) {
+        SSect val = currArticle();
+        if (val == null)
+            return;
+        if (val.getCurrChild() != null)
+            val = val.getCurrChild();
+        if (!val.isValue)
+            return;
+        if ("int".equals(val.entity.media)) {
+            try {
+                int res = Integer.parseInt(text);
+                client.makeActionHandler(this, Action.create("set").add(val.entity.name, text)).run();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        else if ("real".equals(val.entity.media)) {
+            try {
+                text = text.replace(',','.');
+                double res = Double.parseDouble(text);
+                client.makeActionHandler(this, Action.create("set").add(val.entity.name, text)).run();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        else if ("date".equals(val.entity.media) || "datetime".equals(val.entity.media)) {
+            try {
+                client.makeActionHandler(this, Action.create("set").add(val.entity.name, text)).run();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+        else if ("geolocation".equals(val.entity.media)) {
+            Action action = new Action("places-autocomplete").add("text", text);
+            client.sendServerCmd(this, action, new SrvCallback() {
+                @Override
+                public void onSuccess(String result) {
+                    try {
+                        JSONObject jobj = new JSONObject(result);
+                        JSONArray jarr = jobj.getJSONArray("places");
+                        // make menu list
+                        ArrayList<SSect> menuList = new ArrayList<>();
+                        for (int i = 0; i < jarr.length(); ++i) {
+                            JSONObject jpi = jarr.getJSONObject(i);
+                            SSect sect = SSect.makeMenu(jpi.getString("description"));
+                            sect.entity.data = "place-selected";
+                            sect.entity.padd("placeId", jpi.getString("placeId"));
+                            menuList.add(sect);
+                        }
+                        SSect menu = SSect.makeMenu("Places");
+                        menu.children = menuList.toArray(new SSect[menuList.size()]);
+                        client.showMenu(SiteNavigator.this, menu);
+                    } catch (Exception e) {
+                        e.printStackTrace();
+                    }
+                }
+            });
+        }
+        else {
+            client.makeActionHandler(this, Action.create("set").add(val.entity.name, text)).run();
+        }
     }
+
+    public void doGeolocationDetails(final NavClient client, String text) {
+        SSect val = currArticle();
+        if (val == null)
+            return;
+        if (val.getCurrChild() != null)
+            val = val.getCurrChild();
+        if (!val.isValue)
+            return;
+        if (!"geolocation".equals(val.entity.media))
+            return;
+
+        PlaceInfo geocode = PlaceInfo.fromJson(text);
+        String lat = geocode.latitude;
+        String lon = geocode.longitude;
+        Context context = (Context)client;
+        String address = geocode.description + " ("+lat+"°"+context.getString(R.string.txt_edt_latitude)+" / "+lon+"°"+context.getString(R.string.txt_edt_longitude)+")";
+        Action action = Action.create("set");
+        action.add(val.entity.name + ".address", address);
+        action.add(val.entity.name + ".latitude", lat);
+        action.add(val.entity.name + ".longitude", lon);
+        action.add(val.entity.name + ".timezone", geocode.timezone);
+        try {
+            JSONObject jobj = new JSONObject();
+            jobj.put("address", address);
+            jobj.put("latitude", lat);
+            jobj.put("longitude", lon);
+            val.entity.data = jobj.toString();
+            action.add(val.entity.name, val.entity.data);
+            client.makeActionHandler(this, action).run();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
 
 
     protected static class BaseActionHandler extends ActionHandler {
@@ -431,7 +532,7 @@ public class SiteNavigator implements Navigator {
                     return action;
                 }
                 else if (child.isValue)
-                    return new UIAction("Edit", "edit").padd("vname", ds.entity.name);
+                    return new UIAction("Edit", "edit").padd("vname", child.entity.name);
                 else if (child.hasArticle || child.hasChildren || child.children != null)
                     return new UIAction("Enter", "enter").padd("sectID", child.guid);
             }

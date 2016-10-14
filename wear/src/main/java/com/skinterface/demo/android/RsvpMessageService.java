@@ -102,6 +102,17 @@ public class RsvpMessageService extends WearableListenerService {
             addIncomingReplay(requestId, json);
             return;
         }
+        if (msg.getPath().startsWith(IOUtils.HELP_REPLAY_PATH)) {
+            int requestId = Integer.parseInt(msg.getPath().substring(IOUtils.HELP_REPLAY_PATH.length()));
+            if (msg.getData() == null) {
+                addIncomingReplay(requestId, null);
+                return;
+            }
+            String json = new String(msg.getData(), IOUtils.UTF8);
+            Log.i(TAG, "responce: "+json);
+            addIncomingReplay(requestId, json);
+            return;
+        }
         if (msg.getPath().startsWith(IOUtils.CHAT_ACTION_PATH)) {
             if (msg.getData() == null)
                 return;

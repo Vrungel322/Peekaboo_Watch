@@ -4,7 +4,6 @@ package com.skinterface.demo.android;
 import android.content.Context;
 import android.os.AsyncTask;
 import android.util.AttributeSet;
-import android.util.Log;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
@@ -12,31 +11,12 @@ import android.widget.ArrayAdapter;
 import android.widget.AutoCompleteTextView;
 import android.widget.Filter;
 import android.widget.Filterable;
-import android.widget.Toast;
 
-import org.json.JSONArray;
-import org.json.JSONException;
-import org.json.JSONObject;
-import org.json.JSONTokener;
-
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.net.HttpURLConnection;
-import java.net.MalformedURLException;
-import java.net.URL;
-import java.net.URLEncoder;
 import java.util.ArrayList;
 
 public class GeocodeAutocomplete extends AutoCompleteTextView implements OnItemClickListener {
 
     private static final String LOG_TAG = "geocode";
-    private static final String PLACES_API_BASE = "https://maps.googleapis.com/maps/api/place";
-    private static final String TIMEZONE_API_BASE = "https://maps.googleapis.com/maps/api/timezone";
-    private static final String TYPE_AUTOCOMPLETE = "/autocomplete";
-    private static final String TYPE_DETAILS = "/details";
-    private static final String OUT_JSON = "/json";
-
-    private static final String API_KEY = "AIzaSyCNytttK7SCCGuCmh8VufOGQ4nwH8BCLm8";
 
     public OnPlaceResolvedListener listener;
 
@@ -47,21 +27,8 @@ public class GeocodeAutocomplete extends AutoCompleteTextView implements OnItemC
     public String longitude;
     public String timezone;
 
-    static class PlaceInfo {
-        String description;
-        String placeId;
-        public PlaceInfo(String description, String placeId) {
-            this.description = description;
-            this.placeId = placeId;
-        }
-        @Override
-        public String toString() {
-            return description;
-        }
-    }
-
     public interface OnPlaceResolvedListener {
-        void onPlaceResolved(GeocodeAutocomplete geocode);
+        void onPlaceResolved(PlaceInfo pi);
     }
 
     public GeocodeAutocomplete(Context context) {
@@ -97,71 +64,24 @@ public class GeocodeAutocomplete extends AutoCompleteTextView implements OnItemC
         fillDetails(pi);
     }
 
-    public static ArrayList<PlaceInfo> autocomplete(String input) {
-        ArrayList<PlaceInfo> resultList = null;
-
-        try {
-            StringBuilder sb = new StringBuilder(PLACES_API_BASE + TYPE_AUTOCOMPLETE + OUT_JSON);
-            sb.append("?key=" + API_KEY);
-            sb.append("&types=geocode");
-            sb.append("&input=" + URLEncoder.encode(input, "utf8"));
-            URL url = new URL(sb.toString());
-            JSONObject jobj = IOUtils.parseHTTPResponce(url.openConnection());
-            if (jobj == null)
-                return resultList;
-            JSONArray predsJsonArray = jobj.getJSONArray("predictions");
-            // Extract the Place descriptions from the results
-            resultList = new ArrayList<PlaceInfo>(predsJsonArray.length());
-            for (int i = 0; i < predsJsonArray.length(); i++) {
-                JSONObject jpl = predsJsonArray.getJSONObject(i);
-                PlaceInfo pi = new PlaceInfo(jpl.getString("description"), jpl.getString("place_id"));
-                Log.d(LOG_TAG, i+":"+pi.placeId+":"+pi.description);
-                resultList.add(pi);
-            }
-        } catch (Exception e) {
-            Log.e(LOG_TAG, "Cannot getting places", e);
-        }
-
-        return resultList;
-    }
-
     private void fillDetails(final PlaceInfo pi) {
         new AsyncTask<Void,Void,Boolean>() {
             @Override
             protected Boolean doInBackground(Void... params) {
-                try {
-                    StringBuilder sb = new StringBuilder(PLACES_API_BASE + TYPE_DETAILS + OUT_JSON);
-                    sb.append("?key=" + API_KEY);
-                    sb.append("&placeid=" + pi.placeId);
-                    URL url = new URL(sb.toString());
-                    JSONObject jobj = IOUtils.parseHTTPResponce(url.openConnection());
-                    placeId = pi.placeId;
-                    description = pi.description;
-                    address = jobj.getJSONObject("result").getString("formatted_address");
-                    JSONObject loc = jobj.getJSONObject("result").getJSONObject("geometry").getJSONObject("location");
-                    latitude = loc.getString("lat");
-                    longitude = loc.getString("lng");
-                    Log.i(LOG_TAG, "lat:"+latitude+"; lng:"+longitude+"; descr:"+description+"; adder:"+address);
-
-                    sb = new StringBuilder(TIMEZONE_API_BASE + OUT_JSON);
-                    sb.append("?key=" + API_KEY);
-                    sb.append("&location=" + latitude + "," + longitude);
-                    sb.append("&timestamp=0");
-                    url = new URL(sb.toString());
-                    jobj = IOUtils.parseHTTPResponce(url.openConnection());
-                    timezone = jobj.getString("timeZoneId");
-                    Log.i(LOG_TAG, "timezone:"+timezone);
-                    return Boolean.TRUE;
-                } catch (Exception e) {
-                    Log.e(LOG_TAG, "Cannot fill place info", e);
-                }
-                return Boolean.FALSE;
+                return IOUtils.fillPlaceDetails(pi);
             }
-
             @Override
             protected void onPostExecute(Boolean res) {
-                if (res != null && res.booleanValue() && listener != null)
-                    listener.onPlaceResolved(GeocodeAutocomplete.this);
+                if (res != null && res.booleanValue()) {
+                    GeocodeAutocomplete.this.description = pi.description;
+                    GeocodeAutocomplete.this.address     = pi.address;
+                    GeocodeAutocomplete.this.placeId     = pi.placeId;
+                    GeocodeAutocomplete.this.latitude    = pi.latitude;
+                    GeocodeAutocomplete.this.longitude   = pi.longitude;
+                    GeocodeAutocomplete.this.timezone    = pi.timezone;
+                    if (listener != null)
+                        listener.onPlaceResolved(pi);
+                }
             }
         }.execute();
     }
@@ -191,7 +111,7 @@ public class GeocodeAutocomplete extends AutoCompleteTextView implements OnItemC
                     FilterResults filterResults = new FilterResults();
                     if (constraint != null) {
                         // Retrieve the autocomplete results.
-                        resultList = autocomplete(constraint.toString());
+                        resultList = IOUtils.placesAutoComplete(constraint.toString());
                         if (resultList != null) {
                             // Assign the data to the FilterResults
                             filterResults.values = resultList;

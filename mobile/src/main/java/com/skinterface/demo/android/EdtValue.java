@@ -4,7 +4,6 @@ import android.content.Context;
 import android.text.Editable;
 import android.text.InputType;
 import android.text.TextWatcher;
-import android.util.Log;
 import android.view.View;
 import android.widget.EditText;
 
@@ -115,7 +114,7 @@ public class EdtValue {
             }
             edt.setOnPlaceResolvedListener(new GeocodeAutocomplete.OnPlaceResolvedListener() {
                 @Override
-                public void onPlaceResolved(GeocodeAutocomplete geocode) {
+                public void onPlaceResolved(PlaceInfo geocode) {
                     String address = saveGeoCode(geocode);
                     edt.setText(address, false);
                 }
@@ -142,7 +141,7 @@ public class EdtValue {
         }
     }
 
-    String saveGeoCode(GeocodeAutocomplete geocode) {
+    String saveGeoCode(PlaceInfo geocode) {
         String lat = geocode.latitude;
         String lon = geocode.longitude;
         String address = geocode.description + " ("+lat+"°"+context.getString(R.string.txt_edt_latitude)+" / "+lon+"°"+context.getString(R.string.txt_edt_longitude)+")";

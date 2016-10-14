@@ -28,6 +28,7 @@ import com.google.android.gms.wearable.Wearable;
 import com.peekaboo.presentation.services.ChatListener;
 import com.peekaboo.presentation.services.ChatRequest;
 
+import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
@@ -36,7 +37,6 @@ import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
@@ -280,7 +280,7 @@ public class RsvpService extends Service implements
     @Override
     public void onMessageReceived(final MessageEvent msg) {
         Log.i(TAG, "received message from node: "+msg.getSourceNodeId()+", path: "+msg.getPath());
-        Uri uri = Uri.parse(msg.getPath());
+        final Uri uri = Uri.parse(msg.getPath());
         if (msg.getPath().startsWith(IOUtils.CHAT_ACTION_PATH)) {
             byte[] responce = null;
             if (mChatService != null) {
@@ -334,6 +334,48 @@ public class RsvpService extends Service implements
                     Log.e(TAG, "Error sending char text/voice", e);
                 }
             }
+            return;
+        }
+        if (msg.getPath().startsWith(IOUtils.HELP_ACTION_PATH)) {
+            MainActivity.executor.execute(new Runnable() {
+                @Override
+                public void run() {
+                    byte[] responce = null;
+                    String action = uri.getPath().substring(IOUtils.HELP_ACTION_PATH.length());
+                    if ("places-autocomplete".equals(action)) {
+                        try {
+                            String text = uri.getQueryParameter("text");
+                            // Retrieve the autocomplete results.
+                            ArrayList<PlaceInfo> resultList = IOUtils.placesAutoComplete(text);
+                            JSONObject jobj = new JSONObject();
+                            jobj.put("action", action);
+                            if (resultList == null) {
+                                jobj.put("places", null);
+                            } else {
+                                JSONArray jarr = new JSONArray();
+                                for (PlaceInfo pi : resultList)
+                                    jarr.put(pi.fillJson(new JSONObject()));
+                                jobj.put("places", jarr);
+                            }
+                            responce = jobj.toString().getBytes(IOUtils.UTF8);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error places autocomplete", e);
+                        }
+                    }
+                    else if ("place-details".equals(action)) {
+                        try {
+                            String placeId = uri.getQueryParameter("placeId");
+                            String description = uri.getQueryParameter("description");
+                            PlaceInfo pi = new PlaceInfo(description, placeId);
+                            if (IOUtils.fillPlaceDetails(pi))
+                                responce = pi.fillJson(new JSONObject()).toString().getBytes(IOUtils.UTF8);
+                        } catch (Exception e) {
+                            Log.e(TAG, "Error places details", e);
+                        }
+                    }
+                    Wearable.MessageApi.sendMessage(mGoogleApiClient, msg.getSourceNodeId(), IOUtils.HELP_REPLAY_PATH+msg.getRequestId(), responce);
+                }
+            });
             return;
         }
         if (msg.getPath().startsWith(IOUtils.RSVP_ACTION_PATH)) {

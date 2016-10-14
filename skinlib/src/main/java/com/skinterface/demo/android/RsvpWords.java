@@ -91,7 +91,7 @@ public final class RsvpWords {
     }
     public RsvpWords addWarning(String text) {
         justRead |= Navigator.JR_WARNING;
-        return addWords(Navigator.JR_WARNING, '⚠', text, 3*DEFAULT_WEIGHT);
+        return addWords(Navigator.JR_WARNING, '⚠', text, 5*DEFAULT_WEIGHT);
     }
     public RsvpWords addValueWords(SSect sect) {
         if (sect == null || !sect.isValue)
@@ -110,9 +110,9 @@ public final class RsvpWords {
         String val = makeValueText(entity);
         if (val != null) {
             if (val.isEmpty()) {
-                addWords(Navigator.JR_VALUE, ch, "∅", 3*DEFAULT_WEIGHT);
+                addWords(Navigator.JR_VALUE, ch, "∅", 5*DEFAULT_WEIGHT);
             } else {
-                addWords(Navigator.JR_VALUE, ch, val, 3*DEFAULT_WEIGHT);
+                addWords(Navigator.JR_VALUE, ch, val, 30*DEFAULT_WEIGHT);
             }
         }
         return this;
@@ -193,18 +193,11 @@ public final class RsvpWords {
                 return null;
             case "date":
             case "datetime":
-//                try {
-//                    String s = value.data;
-//                    DateTimeFormat dtf = DateTimeFormat.getFormat(DateTimeFormat.PredefinedFormat.ISO_8601);
-//                    Date date = dtf.parse(s);
-//                    Date dtz1 = dtf.parse("1970-01-01T00:00:00.000" + s.substring(s.length() - 6));
-//                    int offs = (int) dtz1.getTime();
-//                    TimeZone tz = com.google.gwt.i18n.client.TimeZone.createTimeZone(offs / 1000 / 60);
-//                    dtf = DateTimeFormat.getFormat(DateTimeFormat.PredefinedFormat.DATE_TIME_FULL);
-//                    return dtf.format(date, tz);
-//                } catch (Exception e) {
-//                    addWarning("Bad date value");
-//                }
+                try {
+                    return value.data;
+                } catch (Exception e) {
+                    addWarning("Bad date value");
+                }
                 return null;
             case "text":
             case "int":

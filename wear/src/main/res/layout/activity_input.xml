@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RelativeLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/activity_input"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context="com.skinterface.demo.android.InputActivity"
+    tools:deviceIds="wear">
+
+    <EditText
+        android:id="@+id/input"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="36px"
+        android:layout_marginLeft="26dp"
+        android:layout_marginRight="26dp"
+        android:ems="10"
+        android:lines="1"
+        android:layout_alignParentTop="true"
+        android:layout_alignParentStart="true"
+        android:fontFamily="sans-serif-condensed"
+        android:textSize="9pt"
+        android:textColor="#d5d5d5" />
+
+    <GridLayout
+        android:id="@+id/buttons"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:layout_below="@+id/input"
+        android:layout_alignParentLeft="true"
+        android:layout_alignParentRight="true"
+        android:layout_alignParentBottom="true"
+        android:layout_marginLeft="22dp"
+        android:rowCount="4"
+        android:columnCount="4"
+        android:alignmentMode="alignBounds"
+        >
+        <TextView android:text="1" style="@style/KeyButton"/>
+        <TextView android:text="2" style="@style/KeyButton"/>
+        <TextView android:text="3" style="@style/KeyButton"/>
+        <TextView android:text="⌫" style="@style/KeyButton"/>
+        <TextView android:text="4" style="@style/KeyButton"/>
+        <TextView android:text="5" style="@style/KeyButton"/>
+        <TextView android:text="6" style="@style/KeyButton"/>
+        <TextView android:text="7" style="@style/KeyButton" android:layout_column="0"/>
+        <TextView android:text="8" style="@style/KeyButton"/>
+        <TextView android:text="9" style="@style/KeyButton"/>
+        <TextView android:text="✔" style="@style/KeyButton"/>
+        <TextView android:text="0" style="@style/KeyButton" android:layout_column="1"/>
+        <TextView android:text="," style="@style/KeyButton"/>
+    </GridLayout>
+
+
+</RelativeLayout>

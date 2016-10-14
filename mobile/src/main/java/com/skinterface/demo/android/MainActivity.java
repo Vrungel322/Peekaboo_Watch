@@ -58,6 +58,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
@@ -135,6 +136,7 @@ public class MainActivity extends AppCompatActivity implements
         rvChildren.setLayoutManager(new LinearLayoutManager(this));
         rvChildren.setHasFixedSize(false);
         rvChildren.setVisibility(View.GONE);
+        setButtonEnabled(R.id.sf_menu, true);
         setButtonEnabled(R.id.sf_return_up, false);
         setButtonEnabled(R.id.sf_descr, false);
         btnForward = (ImageButton) findViewById(R.id.sf_next_auto);
@@ -373,7 +375,7 @@ public class MainActivity extends AppCompatActivity implements
 
     void setButtonEnabled(int id, boolean on) {
         ImageButton btn = (ImageButton)findViewById(id);
-        if (btn == null || btn.isEnabled() == on)
+        if (btn == null)
             return;
         if (on) {
             btn.setEnabled(true);
@@ -489,6 +491,7 @@ public class MainActivity extends AppCompatActivity implements
                 stopVoice();
                 playVoice(ds.title);
                 playVoice(ds.descr);
+                updateActions(nav, Collections.<UIAction>emptyList());
             }
             else if ("read".equals(act)) {
                 stopVoice();
@@ -504,6 +507,7 @@ public class MainActivity extends AppCompatActivity implements
                     playVoice(ds.descr);
                 }
                 play(words);
+                updateActions(nav, Collections.<UIAction>emptyList());
             }
             else {
                 super.run();
@@ -828,7 +832,7 @@ public class MainActivity extends AppCompatActivity implements
                     holder.editor = new EdtValue(MainActivity.this, sect, new Action.ActionExecutor() {
                         @Override
                         public void executeAction(Action action) {
-                            makeActionHandler(nav, action);
+                            makeActionHandler(nav, action).run();
                         }
                     });
             }

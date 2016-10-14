@@ -523,6 +523,8 @@ public class RsvpFragment extends Fragment implements
             words.addTitleWords(sect.title);
             if (sect.descr != null)
                 words.addIntroWords(sect.descr);
+            if (sect.isValue)
+                words.addValueWords(sect);
             mRsvpView.load(words, play);
             return;
         }
@@ -543,6 +545,8 @@ public class RsvpFragment extends Fragment implements
                 words.addTitleWords(child.title);
                 if (child.descr != null)
                     words.addIntroWords(child.descr);
+                if (child.isValue)
+                    words.addValueWords(child);
                 mRsvpView.load(words, play);
             }
             return;
@@ -572,6 +576,8 @@ public class RsvpFragment extends Fragment implements
             words.addTitleWords(sect.title);
             if (sect.descr != null)
                 words.addIntroWords(sect.descr);
+            if (sect.isValue)
+                words.addValueWords(sect);
             mRsvpView.load(words, play);
             updateActions();
             return;
@@ -599,6 +605,8 @@ public class RsvpFragment extends Fragment implements
                 words.addTitleWords(child.title);
                 if (child.descr != null)
                     words.addIntroWords(child.descr);
+                if (child.isValue)
+                    words.addValueWords(child);
                 mRsvpView.load(words, play);
                 updateActions();
                 return;
@@ -623,6 +631,8 @@ public class RsvpFragment extends Fragment implements
                 words.addTitleWords(child.title);
                 if (child.descr != null)
                     words.addIntroWords(child.descr);
+                if (child.isValue)
+                    words.addValueWords(child);
                 mRsvpView.load(words, play);
             } else {
                 cguid = CHILD_POS_END;
@@ -665,6 +675,8 @@ public class RsvpFragment extends Fragment implements
                 words.addTitleWords(child.title);
                 if (child.descr != null)
                     words.addIntroWords(child.descr);
+                if (child.isValue)
+                    words.addValueWords(child);
                 mRsvpView.load(words, false);
                 updateActions();
                 return;
@@ -691,6 +703,8 @@ public class RsvpFragment extends Fragment implements
             words.addTitleWords(sect.title);
             if (sect.descr != null)
                 words.addIntroWords(sect.descr);
+            if (sect.isValue)
+                words.addValueWords(sect);
             mRsvpView.load(words, false);
             updateActions();
             return;

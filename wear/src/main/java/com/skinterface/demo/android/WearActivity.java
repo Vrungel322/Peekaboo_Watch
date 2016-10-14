@@ -56,6 +56,7 @@ public class WearActivity extends WearableActivity implements
     static final int MENU_REQUEST_CODE      = 1000;
     static final int SPEECH_REQUEST_CODE    = 1001;
     static final int AUDIO_REQUEST_CODE     = 1002;
+    static final int NUMERIC_REQUEST_CODE   = 1003;
 
     static final int RSVP_SPEED = 1;
 
@@ -257,8 +258,6 @@ public class WearActivity extends WearableActivity implements
                         RecognizerIntent.EXTRA_RESULTS);
                 if (results != null && !results.isEmpty())
                     nav.doUserInput(this, results.get(0));
-            } else {
-
             }
         }
         else if (requestCode == AUDIO_REQUEST_CODE) {
@@ -267,6 +266,10 @@ public class WearActivity extends WearableActivity implements
                 String receiver = ((ChatNavigator)nav).getPartnerId();
                 sendVoiceConfirm(sender, receiver);
             }
+        }
+        else if (requestCode == NUMERIC_REQUEST_CODE) {
+            if (resultCode == RESULT_OK)
+                nav.doUserInput(this, data.getStringExtra("text"));
         }
         else
             super.onActivityResult(requestCode, resultCode, data);
@@ -334,6 +337,7 @@ public class WearActivity extends WearableActivity implements
     public void onClick(View v) {
         int id = v.getId();
         if (id == R.id.title) {
+            //startActivityForResult(new Intent(this,InputActivity.class),NUMERIC_REQUEST_CODE);
             nav.doShowMenu(this);
         }
         if (id == R.id.text || id == R.id.clock)
@@ -415,6 +419,7 @@ public class WearActivity extends WearableActivity implements
     public void startVoiceRecognition() {
         Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
         intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+        intent.putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 5);
         startActivityForResult(intent, SPEECH_REQUEST_CODE);
     }
 
@@ -453,6 +458,18 @@ public class WearActivity extends WearableActivity implements
         }
         else if ("show".equals(menu.entity.data)) {
             makeActionHandler(nav, menu.toAction()).run();
+        }
+        else if ("place-selected".equals(menu.entity.data)) {
+            String placeId = menu.entity.val("placeId");
+            Action action = new Action("place-details")
+                    .add("placeId", placeId)
+                    .add("description", menu.title.data);
+            sendServerCmd(nav, action, new SrvCallback() {
+                @Override
+                public void onSuccess(String result) {
+                    ((SiteNavigator)nav).doGeolocationDetails(WearActivity.this, result);
+                }
+            });
         }
         else if ("chat".equals(menu.entity.data)) {
             String id = menu.entity.val("room");
@@ -568,11 +585,26 @@ public class WearActivity extends WearableActivity implements
     }
 
     private void siteServerCmd(SiteNavigator nav, Action action, final SrvCallback callback) {
-        final  String reqData = action.serializeToCmd(nav.getSessionID(), 0).toString();
         String nodeId = pickBestNodeId();
         if (nodeId != null) {
-            PendingResult<MessageApi.SendMessageResult> result = Wearable.MessageApi.sendMessage(
-                    mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, reqData.getBytes(IOUtils.UTF8));
+            PendingResult<MessageApi.SendMessageResult> result;
+            if ("places-autocomplete".equals(action.getAction()) || "place-details".equals(action.getAction())) {
+                Uri.Builder uri = new Uri.Builder().path(IOUtils.HELP_ACTION_PATH+action.getAction());
+                if (action.params != null) {
+                    for (Map.Entry<String, String> e : action.params.entrySet()) {
+                        if (e.getValue() != null)
+                            uri.appendQueryParameter(e.getKey(), e.getValue());
+                        else
+                            uri.appendQueryParameter(e.getKey(), "");
+                    }
+                }
+                result = Wearable.MessageApi.sendMessage(
+                        mGoogleApiClient, nodeId, uri.toString(), new byte[0]);
+            } else {
+                final  String reqData = action.serializeToCmd(nav.getSessionID(), 0).toString();
+                result = Wearable.MessageApi.sendMessage(
+                        mGoogleApiClient, nodeId, IOUtils.RSVP_ACTION_PATH, reqData.getBytes(IOUtils.UTF8));
+            }
             if (callback != null)
                 result.setResultCallback(new ResultCallback<MessageApi.SendMessageResult>() {
                         @Override
@@ -584,6 +616,7 @@ public class WearActivity extends WearableActivity implements
         }
         else
         {
+            final  String reqData = action.serializeToCmd(nav.getSessionID(), 0).toString();
             new AsyncTask<Void, Void, String>() {
                 @Override
                 protected String doInBackground(Void... params) {
@@ -640,11 +673,33 @@ public class WearActivity extends WearableActivity implements
         }
         public void run() {
             String act = action.getAction();
-            if ("show-menu".equals(act)) {
-                nav.doShowMenu(client);
-            }
-            else if ("edit".equals(act)) {
-                startVoiceRecognition();
+            if ("edit".equals(act)) {
+                SSect val = nav.currArticle();
+                if (val == null)
+                    return;
+                if (val.getCurrChild() != null)
+                    val = val.getCurrChild();
+                if (!val.isValue)
+                    return;
+                String str = val.entity.data;
+                if ("int".equals(val.entity.media))
+                    startActivityForResult(
+                            new Intent(WearActivity.this,InputActivity.class).putExtra(val.entity.media, str),
+                            NUMERIC_REQUEST_CODE);
+                else if ("real".equals(val.entity.media))
+                    startActivityForResult(
+                            new Intent(WearActivity.this,InputActivity.class).putExtra(val.entity.media, str),
+                            NUMERIC_REQUEST_CODE);
+                else if ("date".equals(val.entity.media) || "datetime".equals(val.entity.media))
+                    startActivityForResult(
+                            new Intent(WearActivity.this,InputActivity.class).putExtra(val.entity.media, str),
+                            NUMERIC_REQUEST_CODE);
+                else if ("geolocation".equals(val.entity.media)) {
+                    Intent intent = new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH);
+                    intent.putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
+                    startActivityForResult(intent, SPEECH_REQUEST_CODE);
+                }
+                return;
             }
             super.run();
         }

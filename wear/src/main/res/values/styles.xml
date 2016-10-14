@@ -5,4 +5,17 @@
     <style name="RsvpTheme" parent="@android:style/Theme.DeviceDefault">
         <item name="android:windowSwipeToDismiss">false</item>
     </style>
+    <style name="KeyButton" parent="@android:style/Widget.DeviceDefault.TextView">
+        <item name="android:textAppearance">@android:style/TextAppearance.DeviceDefault.Small</item>
+        <item name="android:background">@drawable/key_background</item>
+        <item name="android:gravity">center</item>
+        <item name="android:layout_columnWeight">1</item>
+        <item name="android:layout_margin">1dp</item>
+        <item name="android:paddingTop">10dp</item>
+        <item name="android:paddingBottom">10dp</item>
+        <item name="android:paddingLeft">1dp</item>
+        <item name="android:paddingRight">1dp</item>
+        <item name="android:clickable">true</item>
+        <item name="android:onClick">onKeyButtonClick</item>
+    </style>
 </resources>

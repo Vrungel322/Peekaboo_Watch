@@ -7,7 +7,7 @@
         android:required="true"/>
 
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
-    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>
 
@@ -31,15 +31,14 @@
             android:theme="@style/RsvpTheme">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>
+
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
-
         <activity
             android:name=".MenuActivity"
             android:exported="false">
         </activity>
-
         <activity
             android:name=".VoiceActivity"
             android:exported="false">
@@ -54,6 +53,10 @@
                     android:scheme="wear"/>
                 <data
                     android:host="*"
+                    android:pathPrefix="/help/"
+                    android:scheme="wear"/>
+                <data
+                    android:host="*"
                     android:pathPrefix="/chat/"
                     android:scheme="wear"/>
             </intent-filter>
@@ -62,6 +65,8 @@
         <activity
             android:name=".CardsActivity"
             android:label="@string/title_activity_cards">
+        </activity>
+        <activity android:name=".InputActivity">
         </activity>
     </application>
 

@@ -147,7 +147,7 @@ public class RsvpFragment extends Fragment implements
                 state = saved.getInt("rsvp.state");
                 flags = saved.getInt("rsvp.flags");
                 updateButtons();
-                update();
+                fixupChildPosition();
                 onRepeat(false);
             }
         }
@@ -249,7 +249,7 @@ public class RsvpFragment extends Fragment implements
             setImageResource(mNextButton, R.drawable.ic_pause);
     }
 
-    private void updateButtons() {
+    void updateButtons() {
         Navigator nav = activity.nav;
         if (nav == null) {
             mEnterAction = null;
@@ -328,7 +328,7 @@ public class RsvpFragment extends Fragment implements
         return true;
     }
 
-    public void update() {
+    public void fixupChildPosition() {
         if (cguid != null) {
             if (cguid == CHILD_POS_END) {
                 sect.currListPosition = sect.children.length;

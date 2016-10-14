@@ -47,7 +47,7 @@ public interface Navigator {
         void returnToRoom(Navigator nav, SSect sect, int flags);
         void showWhereAmIData(Navigator nav, SSect sect, int flags);
 
-        void updateActions(Navigator nav, List<UIAction> actions);
+        void updateActions(Navigator nav);
         void sendServerCmd(Navigator nav, Action action, SrvCallback callback);
     }
 

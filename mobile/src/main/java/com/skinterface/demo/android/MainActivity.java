@@ -6,6 +6,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Matrix;
@@ -94,7 +95,11 @@ public class MainActivity extends AppCompatActivity implements
     TextView tvText;
     TextView tvStatus;
     RecyclerView rvChildren;
-    ImageButton btnForward;
+    ImageButton btnMenu;
+    ImageButton btnNext;
+    ImageButton btnPrev;
+    ImageButton btnEnter;
+    ImageButton btnLeave;
 
     SiteNavigator nav;
     // Session storage
@@ -136,12 +141,16 @@ public class MainActivity extends AppCompatActivity implements
         rvChildren.setLayoutManager(new LinearLayoutManager(this));
         rvChildren.setHasFixedSize(false);
         rvChildren.setVisibility(View.GONE);
-        setButtonEnabled(R.id.sf_menu, true);
-        setButtonEnabled(R.id.sf_return_up, false);
-        setButtonEnabled(R.id.sf_descr, false);
-        btnForward = (ImageButton) findViewById(R.id.sf_next_auto);
-        btnForward.setImageResource(R.drawable.ic_flare_black_48dp);
-        btnForward.setOnClickListener(this);
+        btnMenu = (ImageButton) findViewById(R.id.sf_menu);
+        btnNext = (ImageButton) findViewById(R.id.sf_next);
+        btnPrev = (ImageButton) findViewById(R.id.sf_prev);
+        btnEnter = (ImageButton) findViewById(R.id.sf_enter);
+        btnLeave = (ImageButton) findViewById(R.id.sf_leave);
+        setButtonEnabled(btnMenu, R.drawable.ic_flare_black_48dp);
+        setButtonEnabled(btnNext, 0);
+        setButtonEnabled(btnPrev, 0);
+        setButtonEnabled(btnEnter, 0);
+        setButtonEnabled(btnLeave, 0);
 
         IntentFilter intentFilter = new IntentFilter();
         intentFilter.addAction(RsvpService.ACTION_CONNECTIONS_CHANGED);
@@ -149,6 +158,36 @@ public class MainActivity extends AppCompatActivity implements
 
         nav = new SiteNavigator(saved==null?null:saved.getBundle("navigator"));
         handler.activityWeakReference = new WeakReference<>(this);
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            int res1 = checkSelfPermission(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            int res2 = checkSelfPermission(Manifest.permission.READ_EXTERNAL_STORAGE);
+            int res3 = checkSelfPermission(Manifest.permission.ACCESS_NETWORK_STATE);
+            int res4 = checkSelfPermission(Manifest.permission.INTERNET);
+            if (res1 != PackageManager.PERMISSION_GRANTED ||
+                res2 != PackageManager.PERMISSION_GRANTED ||
+                res3 != PackageManager.PERMISSION_GRANTED ||
+                res4 != PackageManager.PERMISSION_GRANTED )
+            {
+                requestPermissions(new String[]{
+                        Manifest.permission.WRITE_EXTERNAL_STORAGE,
+                        Manifest.permission.READ_EXTERNAL_STORAGE,
+                        Manifest.permission.ACCESS_NETWORK_STATE,
+                        Manifest.permission.INTERNET,
+                }, 1);
+                return;
+            }
+        }
+    }
+
+    @Override
+    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
+        if (requestCode == 1 && resultCode != RESULT_OK) {
+            // permissions not granted
+            finish();
+            return;
+        }
+        super.onActivityResult(requestCode, resultCode, data);
     }
 
     @Override
@@ -175,6 +214,7 @@ public class MainActivity extends AppCompatActivity implements
 
     public void attachToSite(SiteNavigator nav, SSect menu) {
         makeActionHandler(nav, new Action("home")).run();
+        updateActions(nav);
     }
 
     @Override
@@ -296,19 +336,30 @@ public class MainActivity extends AppCompatActivity implements
             nav.doHello(this);
         }
         if (id == R.id.sf_menu) {
-            showMenu(nav, nav.siteMenu());
+            if (nav.siteMenu() == null)
+                nav.doHello(this);
+            else
+                showMenu(nav, nav.siteMenu());
             return true;
         }
-        if (id == R.id.sf_descr) {
-            makeActionHandler(nav, new Action("descr")).run();
-            return true;
-        }
-        if (id == R.id.sf_next_auto) {
+        //if (id == R.id.sf_descr) {
+        //    makeActionHandler(nav, new Action("descr")).run();
+        //    return true;
+        //}
+        if (id == R.id.sf_next) {
             nav.doDefaultAction(this, Navigator.DEFAULT_ACTION_NEXT);
             return true;
         }
-        if (id == R.id.sf_return_up) {
-            makeActionHandler(nav, new Action("return-up")).run();
+        if (id == R.id.sf_prev) {
+            nav.doDefaultAction(this, Navigator.DEFAULT_ACTION_PREV);
+            return true;
+        }
+        if (id == R.id.sf_enter) {
+            nav.doDefaultAction(this, Navigator.DEFAULT_ACTION_ENTER);
+            return true;
+        }
+        if (id == R.id.sf_leave) {
+            nav.doDefaultAction(this, Navigator.DEFAULT_ACTION_LEAVE);
             return true;
         }
         if (id == R.id.run_tts) {
@@ -373,50 +424,53 @@ public class MainActivity extends AppCompatActivity implements
         storage.put(ds.guid+".intro", String.valueOf(value));
     }
 
-    void setButtonEnabled(int id, boolean on) {
-        ImageButton btn = (ImageButton)findViewById(id);
+    private void setButtonEnabled(ImageButton btn, int resId) {
         if (btn == null)
             return;
-        if (on) {
-            btn.setEnabled(true);
-            btn.setOnClickListener(this);
-            btn.setImageAlpha(255);
-        } else {
-            btn.setEnabled(false);
-            btn.setClickable(false);
-            btn.setOnClickListener(null);
-            btn.setImageAlpha(64);
+        boolean on = resId != 0;
+        btn.setImageResource(resId);
+        btn.setEnabled(on);
+        btn.setOnClickListener(on ? this : null);
+        btn.setClickable(on);
+        btn.setImageAlpha(on ? 255 : 64);
+    }
+
+    private void setButtonEnabled(ImageButton btn, String action) {
+        if (action == null || action.isEmpty()) {
+            setButtonEnabled(btn, 0);
+            return;
+        }
+        switch (action) {
+        case "hello":     setButtonEnabled(btn, R.drawable.ic_flare_black_48dp); return;
+        case "show-menu": setButtonEnabled(btn, R.drawable.ic_flare_black_48dp); return;
+        case "edit":      setButtonEnabled(btn, R.drawable.ic_edit_black_48dp); return;
+        case "close":     setButtonEnabled(btn, R.drawable.ic_close_black_48dp); return;
+        case "return-up": setButtonEnabled(btn, R.drawable.ic_arrow_upward_black_48dp); return;
+        case "return":    setButtonEnabled(btn, R.drawable.ic_arrow_upward_black_48dp); return;
+        case "enter":     setButtonEnabled(btn, R.drawable.ic_arrow_downward_black_48dp); return;
+        case "read":      setButtonEnabled(btn, R.drawable.ic_exit_to_app_black_48dp); return;
+        case "list":      setButtonEnabled(btn, R.drawable.ic_playlist_play_black_48dp); return;
+        case "next":      setButtonEnabled(btn, R.drawable.ic_arrow_forward_black_48dp); return;
+        case "prev":      setButtonEnabled(btn, R.drawable.ic_arrow_back_black_48dp); return;
+        case "auto-next-up": setButtonEnabled(btn, R.drawable.ic_redo_black_48dp); return;
+        case "auto-prev-up": setButtonEnabled(btn, R.drawable.ic_undo_black_48dp); return;
+        default:          setButtonEnabled(btn, R.drawable.ic_touch_app_black_48dp); return;
         }
     }
 
-    private boolean hasAction(String act, List<UIAction> actions) {
-        for (UIAction uia : actions) {
-            if (act.equals(uia.action.getAction()))
-                return true;
-        }
-        return false;
+    private void setButtonEnabled(ImageButton btn, UIAction action) {
+        if (action == null)
+            setButtonEnabled(btn, 0);
+        else
+            setButtonEnabled(btn, action.getAct());
     }
+
     @Override
-    public void updateActions(Navigator nav, List<UIAction> actions) {
-        setButtonEnabled(R.id.sf_return_up, hasAction("return-up", actions));
-        setButtonEnabled(R.id.sf_descr,     hasAction("descr", actions));
-        UIAction dflt = nav.getUIAction(Navigator.DEFAULT_ACTION_NEXT);
-        if (dflt == null) {
-            btnForward.setVisibility(View.GONE);
-        } else {
-            btnForward.setVisibility(View.VISIBLE);
-            String act = dflt.action.getAction();
-            if ("read".equals(act))
-                btnForward.setImageResource(R.drawable.ic_format_align_left_black_48dp);
-            else if ("auto-next-up".equals(act))
-                btnForward.setImageResource(R.drawable.ic_redo_black_48dp);
-            else if ("enter".equals(act) || "show".equals(act))
-                btnForward.setImageResource(R.drawable.ic_exit_to_app_black_48dp);
-            else if ("show-menu".equals(act))
-                btnForward.setImageResource(R.drawable.ic_menu_black_48dp);
-            else
-                btnForward.setImageResource(R.drawable.ic_touch_app_black_48dp);
-        }
+    public void updateActions(Navigator nav) {
+        setButtonEnabled(btnNext, nav.getUIAction(Navigator.DEFAULT_ACTION_NEXT));
+        setButtonEnabled(btnPrev, nav.getUIAction(Navigator.DEFAULT_ACTION_PREV));
+        setButtonEnabled(btnEnter, nav.getUIAction(Navigator.DEFAULT_ACTION_ENTER));
+        setButtonEnabled(btnLeave, nav.getUIAction(Navigator.DEFAULT_ACTION_LEAVE));
     }
 
 
@@ -491,7 +545,6 @@ public class MainActivity extends AppCompatActivity implements
                 stopVoice();
                 playVoice(ds.title);
                 playVoice(ds.descr);
-                updateActions(nav, Collections.<UIAction>emptyList());
             }
             else if ("read".equals(act)) {
                 stopVoice();
@@ -507,11 +560,15 @@ public class MainActivity extends AppCompatActivity implements
                     playVoice(ds.descr);
                 }
                 play(words);
-                updateActions(nav, Collections.<UIAction>emptyList());
+            }
+            else if ("list".equals(act)) {
+                stopVoice();
+                titleChildAt(ds.currListPosition);
             }
             else {
                 super.run();
             }
+            updateActions(nav);
         }
     }
 
@@ -583,6 +640,7 @@ public class MainActivity extends AppCompatActivity implements
     public void showWhereAmIData(Navigator nav, final SSect ds, int flags) {
         if (ds == null) {
             play(new RsvpWords().addWarning("Place is not known"));
+            updateActions(nav);
             return;
         }
         RsvpWords words = new RsvpWords();
@@ -600,6 +658,7 @@ public class MainActivity extends AppCompatActivity implements
             playValueVoice(ds);
         }
         play(words);
+        updateActions(nav);
     }
 
     @Override
@@ -637,12 +696,14 @@ public class MainActivity extends AppCompatActivity implements
         play(words);
         if (rvChildren.getVisibility() == View.VISIBLE)
             nav.setJustShown(Navigator.JR_LIST);
+        updateActions(nav);
     }
 
     @Override
     public void returnToRoom(Navigator nav, SSect ds, int flags) {
         if (ds.currListPosition >= 0) {
             titleChildAt(ds.currListPosition);
+            updateActions(nav);
         } else {
             enterToRoom(nav, ds, flags);
         }

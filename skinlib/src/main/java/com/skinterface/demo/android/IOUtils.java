@@ -108,6 +108,30 @@ public class IOUtils {
         }
     }
 
+    public static boolean copyStream(InputStream is, OutputStream os, boolean close) {
+        final int buffer_size=1024;
+
+        try {
+            byte[] bytes=new byte[buffer_size];
+            for(;;) {
+                int count=is.read(bytes, 0, buffer_size);
+                if (count==-1)
+                    break;
+                os.write(bytes, 0, count);
+            }
+            return true;
+        }
+        catch(Exception ex){
+            return false;
+        }
+        finally {
+            if (close) {
+                safeClose(is);
+                safeClose(os);
+            }
+        }
+    }
+
     public static ArrayList<PlaceInfo> placesAutoComplete(String input) {
         ArrayList<PlaceInfo> resultList = null;
 

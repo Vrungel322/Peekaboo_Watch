@@ -24,6 +24,7 @@ import com.google.android.gms.common.api.PendingResult;
 import com.google.android.gms.common.api.ResultCallback;
 import com.google.android.gms.wearable.CapabilityApi;
 import com.google.android.gms.wearable.CapabilityInfo;
+import com.google.android.gms.wearable.Channel;
 import com.google.android.gms.wearable.ChannelApi;
 import com.google.android.gms.wearable.MessageApi;
 import com.google.android.gms.wearable.Node;
@@ -33,13 +34,13 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
-import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
@@ -198,7 +199,7 @@ public class WearActivity extends WearableActivity implements
         try {
             SSect msg = ChatNavigator.mergeChatMessage(jmsg);
             if (msg != null)
-                getRsvpFragment().update();
+                getRsvpFragment().fixupChildPosition();
         } catch (JSONException e) {
             Log.e(TAG, "Bad chat message", e);
         }
@@ -390,9 +391,13 @@ public class WearActivity extends WearableActivity implements
                             .await(1000, TimeUnit.MILLISECONDS);
                     if (!channelResult.getStatus().isSuccess())
                         return Boolean.FALSE;
-                    Uri uri = Uri.fromFile(new File(getFilesDir(), VOICE_FILE_NAME));
-                    if (!channelResult.getChannel().sendFile(mGoogleApiClient, uri).await().isSuccess())
-                        return Boolean.FALSE;
+                    Channel channel = channelResult.getChannel();
+                    IOUtils.copyStream(
+                            new FileInputStream(new File(getFilesDir(), VOICE_FILE_NAME)),
+                            channel.getOutputStream(mGoogleApiClient).await().getOutputStream(),
+                            true);
+                    channel.close(mGoogleApiClient);
+                    Thread.sleep(500);
                     String post = new Uri.Builder()
                             .path(IOUtils.CHAT_POST_PATH+path)
                             .appendQueryParameter("fmt", "PCM16")
@@ -541,7 +546,8 @@ public class WearActivity extends WearableActivity implements
     }
 
     @Override
-    public void updateActions(Navigator nav, List<UIAction> actions) {
+    public void updateActions(Navigator nav) {
+        getRsvpFragment().updateButtons();
 
     }
 

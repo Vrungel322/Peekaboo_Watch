@@ -33,6 +33,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.IOException;
 import java.io.OutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -317,6 +318,7 @@ public class RsvpService extends Service implements
                     Map<String,String> params = new TreeMap<>();
                     String path = uri.getPath().substring(IOUtils.CHAT_POST_PATH.length());
                     if (path.startsWith("/voice/")) {
+                        //path = new File(getCacheDir(), path.substring(7)).getAbsolutePath();
                         path = new File(getCacheDir(), path.substring(7)).getAbsolutePath();
                         new File(path).setReadable(true, false);
                         params.put("audio", path);
@@ -412,19 +414,30 @@ public class RsvpService extends Service implements
         String path = channel.getPath();
         if (path.startsWith("/voice/")) {
             File file = new File(getCacheDir(), path.substring(7));
-            channel.receiveFile(mGoogleApiClient, Uri.fromFile(file), false);
+            try {
+                file.createNewFile();
+                Log.i(TAG, "Receiving file "+file+" from channel " + channel.getPath());
+                channel.receiveFile(mGoogleApiClient, Uri.fromFile(file), false);
+            } catch (IOException e) {
+                Log.e(TAG, "Error creating a file "+file, e);
+                e.printStackTrace();
+                channel.close(mGoogleApiClient);
+            }
         }
     }
 
     @Override
     public void onChannelClosed(Channel channel, int i, int i1) {
+        Log.i(TAG, "Channel closed: " + channel.getPath());
     }
 
     @Override
     public void onInputClosed(Channel channel, int i, int i1) {
+        Log.i(TAG, "Channel input closed: " + channel.getPath());
     }
 
     @Override
     public void onOutputClosed(Channel channel, int i, int i1) {
+        Log.i(TAG, "Channel output closed: " + channel.getPath());
     }
 }

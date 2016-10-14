@@ -199,8 +199,9 @@ public class SiteNavigator implements Navigator {
     }
 
     public void doDefaultAction(final NavClient client, int dir) {
-        //if (defaultAction != null)
-        //    client.makeActionHandler(this, defaultAction.action).run();
+        UIAction action = getUIAction(dir);
+        if (action != null)
+            client.makeActionHandler(this, action.action).run();
     }
 
     @Override

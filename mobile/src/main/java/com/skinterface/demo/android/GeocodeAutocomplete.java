@@ -49,6 +49,7 @@ public class GeocodeAutocomplete extends AutoCompleteTextView implements OnItemC
     public void init() {
         setAdapter(new GooglePlacesAutocompleteAdapter(getContext(), android.R.layout.simple_dropdown_item_1line));
         setOnItemClickListener(this);
+        setSelectAllOnFocus(true);
     }
 
     public OnPlaceResolvedListener getOnPlaceResolvedListener() {
@@ -62,6 +63,12 @@ public class GeocodeAutocomplete extends AutoCompleteTextView implements OnItemC
     public void onItemClick(AdapterView adapterView, View view, int position, long id) {
         PlaceInfo pi = (PlaceInfo) adapterView.getItemAtPosition(position);
         fillDetails(pi);
+    }
+
+    public void setText(CharSequence text, boolean filter) {
+        super.setText(text, filter);
+        if (!filter)
+            setSelection(0, getText().length());
     }
 
     private void fillDetails(final PlaceInfo pi) {

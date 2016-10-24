@@ -9,6 +9,7 @@ import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Environment;
 import android.support.v4.content.LocalBroadcastManager;
 import android.support.wearable.activity.WearableActivity;
 import android.support.wearable.view.CircularButton;
@@ -201,7 +202,9 @@ public class VoiceActivity extends WearableActivity implements View.OnClickListe
     public void onSoundRecFail() {
         recording_time = 0;
         recording_failed = true;
-        new File(getFilesDir(), WearActivity.VOICE_FILE_NAME).delete();
+        String filesDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES).toString();
+
+        new File(filesDir, WearActivity.VOICE_FILE_NAME).delete();
         updatePosView();
     }
 

@@ -25,6 +25,7 @@ import android.media.AudioTrack;
 import android.media.MediaRecorder;
 import android.os.AsyncTask;
 import android.os.Build;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.support.v4.content.LocalBroadcastManager;
@@ -34,6 +35,7 @@ import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import java.io.IOException;
 
 /**
@@ -64,6 +66,7 @@ public class SoundRecorder {
     private final String mOutputFileName;
     private final AudioManager mAudioManager;
     private final Context mContext;
+    private final String filesDir;
     private State mState = State.IDLE;
     private int mFileSize;
     private int mDuration;
@@ -79,6 +82,8 @@ public class SoundRecorder {
         mOutputFileName = outputFileName;
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         mContext = context;
+        filesDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES).toString();
+
     }
 
     public State getState() {
@@ -105,6 +110,12 @@ public class SoundRecorder {
 
             @Override
             protected Boolean doInBackground(Void... params) {
+                File file = new File(filesDir, mOutputFileName);
+                boolean exists = file.exists();
+                Log.e("SoundRecorder", "start record " + file.getAbsolutePath() + " " + exists);
+                if (exists) {
+                    file.delete();
+                }
                 int BUFFER_SIZE = AudioRecord.getMinBufferSize(RECORDING_RATE, CHANNEL_IN, FORMAT);
                 try {
                     if (BUFFER_SIZE < 0)
@@ -128,8 +139,9 @@ public class SoundRecorder {
                     mFileSize = 0;
                     mDuration = 0;
                     long started = SystemClock.uptimeMillis();
-                    bufferedOutputStream = new BufferedOutputStream(
-                            mContext.openFileOutput(mOutputFileName, Context.MODE_PRIVATE));
+
+                    bufferedOutputStream = new BufferedOutputStream(new FileOutputStream(new File(filesDir, mOutputFileName))/*
+                            mContext.openFileOutput(mOutputFileName, Context.MODE_PRIVATE)*/);
                     byte[] buffer = new byte[BUFFER_SIZE];
                     mAudioRecord.startRecording();
                     LocalBroadcastManager.getInstance(mContext).sendBroadcast(new Intent(ACTION_SOUND_REC_STARTED));
@@ -206,8 +218,11 @@ public class SoundRecorder {
             Log.w(TAG, "Requesting to play while state was not IDLE");
             return;
         }
+        File file = new File(filesDir, mOutputFileName);
+        Log.e("SoundRecorder", "start playback " + file);
 
-        if (!new File(mContext.getFilesDir(), mOutputFileName).exists()) {
+
+        if (!new File(filesDir, mOutputFileName).exists()) {
             // there is no recording to play
             LocalBroadcastManager.getInstance(mContext).sendBroadcast(new Intent(ACTION_SOUND_PLAY_FAIL));
             return;
@@ -237,7 +252,7 @@ public class SoundRecorder {
                     mAudioTrack.play();
                     long started = SystemClock.uptimeMillis();
                     LocalBroadcastManager.getInstance(mContext).sendBroadcast(new Intent(ACTION_SOUND_PLAY_STARTED));
-                    in = mContext.openFileInput(mOutputFileName);
+                    in = /*mContext.openFileInput(mOutputFileName)*/ new FileInputStream(new File(filesDir, mOutputFileName));
                     BufferedInputStream bis = new BufferedInputStream(in);
                     int read;
                     while (!isCancelled() && (read = bis.read(buffer, 0, buffer.length)) > 0) {
@@ -261,6 +276,7 @@ public class SoundRecorder {
                         mAudioTrack.release();
                 }
                 return Boolean.FALSE;
+
             }
 
             @Override
@@ -277,6 +293,7 @@ public class SoundRecorder {
                 mState = State.IDLE;
                 mPlayingAsyncTask = null;
             }
+
         };
 
         mPlayingAsyncTask.execute();

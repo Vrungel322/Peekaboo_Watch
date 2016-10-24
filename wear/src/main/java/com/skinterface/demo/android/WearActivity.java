@@ -4,6 +4,7 @@ import android.content.Intent;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Bundle;
+import android.os.Environment;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -35,6 +36,7 @@ import org.json.JSONObject;
 
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
@@ -85,6 +87,16 @@ public class WearActivity extends WearableActivity implements
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         setContentView(R.layout.activity_main);
+        String filePath = getExternalFilesDir(Environment.DIRECTORY_PICTURES) + "/" + "asd";
+//        getExternalFilesDir()
+//        try {
+//            File file = new File(filePath);
+//            file.createNewFile();
+//            Log.e("WearActivity", file + " " + file.exists());
+//        } catch (IOException e) {
+//            Log.e("WearActivity", String.valueOf(e));
+//            e.printStackTrace();
+//        }
 //        setAmbientEnabled();
 
         mContainerView = (ViewGroup) findViewById(R.id.container);
@@ -392,12 +404,24 @@ public class WearActivity extends WearableActivity implements
                     if (!channelResult.getStatus().isSuccess())
                         return Boolean.FALSE;
                     Channel channel = channelResult.getChannel();
+//                    String child = String.valueOf(System.currentTimeMillis());
+                    String filesDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES).toString();
+
+                    File file = new File(filesDir, WearActivity.VOICE_FILE_NAME);
+//                    file.createNewFile();
+                    Log.e("SoundRecorder", "send file " + file.getAbsolutePath());
+                    OutputStream outputStream = channel.getOutputStream(mGoogleApiClient).await().getOutputStream();
+                    outputStream.flush();
                     IOUtils.copyStream(
-                            new FileInputStream(new File(getFilesDir(), VOICE_FILE_NAME)),
-                            channel.getOutputStream(mGoogleApiClient).await().getOutputStream(),
+                            new FileInputStream(file),
+                            outputStream,
                             true);
                     channel.close(mGoogleApiClient);
                     Thread.sleep(500);
+                    file.delete();
+                    file = new File(filesDir, WearActivity.VOICE_FILE_NAME);
+                    Log.e("WearActivity", "after deletion " + file.exists());
+
                     String post = new Uri.Builder()
                             .path(IOUtils.CHAT_POST_PATH+path)
                             .appendQueryParameter("fmt", "PCM16")

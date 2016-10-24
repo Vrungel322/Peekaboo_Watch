@@ -321,6 +321,7 @@ public class RsvpService extends Service implements
                         //path = new File(getCacheDir(), path.substring(7)).getAbsolutePath();
                         path = new File(getCacheDir(), path.substring(7)).getAbsolutePath();
                         new File(path).setReadable(true, false);
+                        new File(path).setWritable(true, false);
                         params.put("audio", path);
                     }
                     for (String p : uri.getQueryParameterNames())

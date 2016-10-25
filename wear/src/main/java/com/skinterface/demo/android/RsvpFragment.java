@@ -539,7 +539,7 @@ public class RsvpFragment extends Fragment implements
         }
         if (state == STATE_CHILD) {
             int pos = sect.currListPosition;
-            if (pos < sect.children.length) {
+            if (pos < sect.children.length && pos > -1) {
                 SSect child = sect.children[pos];
                 words = new RsvpWords();
                 words.addTitleWords(child.title);

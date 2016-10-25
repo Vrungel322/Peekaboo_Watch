@@ -60,7 +60,6 @@ public class WearActivity extends WearableActivity implements
     static final int SPEECH_REQUEST_CODE    = 1001;
     static final int AUDIO_REQUEST_CODE     = 1002;
     static final int NUMERIC_REQUEST_CODE   = 1003;
-
     static final int RSVP_SPEED = 1;
 
     final Handler handler = new Handler(Looper.getMainLooper()) {
@@ -82,27 +81,18 @@ public class WearActivity extends WearableActivity implements
     private GoogleApiClient mGoogleApiClient;
 
     Navigator nav = RootNavigator.get();
+    private String filesDir;
 
     @Override
     protected void onCreate(Bundle saved) {
         super.onCreate(saved);
         setContentView(R.layout.activity_main);
-        String filePath = getExternalFilesDir(Environment.DIRECTORY_PICTURES) + "/" + "asd";
-//        getExternalFilesDir()
-//        try {
-//            File file = new File(filePath);
-//            file.createNewFile();
-//            Log.e("WearActivity", file + " " + file.exists());
-//        } catch (IOException e) {
-//            Log.e("WearActivity", String.valueOf(e));
-//            e.printStackTrace();
-//        }
-//        setAmbientEnabled();
 
         mContainerView = (ViewGroup) findViewById(R.id.container);
 
         mTitleView = (TextView) findViewById(R.id.title);
         mTitleView.setOnClickListener(this);
+        filesDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES).toString();
 
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
@@ -405,7 +395,6 @@ public class WearActivity extends WearableActivity implements
                         return Boolean.FALSE;
                     Channel channel = channelResult.getChannel();
 //                    String child = String.valueOf(System.currentTimeMillis());
-                    String filesDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES).toString();
 
                     File file = new File(filesDir, WearActivity.VOICE_FILE_NAME);
 //                    file.createNewFile();
@@ -419,8 +408,6 @@ public class WearActivity extends WearableActivity implements
                     channel.close(mGoogleApiClient);
                     Thread.sleep(500);
                     file.delete();
-                    file = new File(filesDir, WearActivity.VOICE_FILE_NAME);
-                    Log.e("WearActivity", "after deletion " + file.exists());
 
                     String post = new Uri.Builder()
                             .path(IOUtils.CHAT_POST_PATH+path)

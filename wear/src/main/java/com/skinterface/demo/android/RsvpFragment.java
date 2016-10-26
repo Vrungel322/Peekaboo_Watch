@@ -1,11 +1,13 @@
 package com.skinterface.demo.android;
 
+import android.app.Activity;
 import android.app.Fragment;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Rect;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Message;
 import android.preference.PreferenceManager;
@@ -106,6 +108,17 @@ public class RsvpFragment extends Fragment implements
     public void onAttach(Context context) {
         super.onAttach(context);
         activity = (WearActivity) getActivity();
+    }
+
+
+//    @SuppressWarnings("deprecation")
+    @Override
+    public void onAttach(Activity activity) {
+        super.onAttach(activity);
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.M) {
+            this.activity = (WearActivity) activity;
+        }
     }
 
     @Override

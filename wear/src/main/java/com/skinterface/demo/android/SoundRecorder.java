@@ -82,7 +82,7 @@ public class SoundRecorder {
         mOutputFileName = outputFileName;
         mAudioManager = (AudioManager) context.getSystemService(Context.AUDIO_SERVICE);
         mContext = context;
-        filesDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES).toString();
+        filesDir = context.getCacheDir().toString();
 
     }
 

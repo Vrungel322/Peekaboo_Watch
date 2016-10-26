@@ -202,7 +202,7 @@ public class VoiceActivity extends WearableActivity implements View.OnClickListe
     public void onSoundRecFail() {
         recording_time = 0;
         recording_failed = true;
-        String filesDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES).toString();
+        String filesDir = getCacheDir().toString();
 
         new File(filesDir, WearActivity.VOICE_FILE_NAME).delete();
         updatePosView();

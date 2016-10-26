@@ -92,7 +92,7 @@ public class WearActivity extends WearableActivity implements
 
         mTitleView = (TextView) findViewById(R.id.title);
         mTitleView.setOnClickListener(this);
-        filesDir = getExternalFilesDir(Environment.DIRECTORY_PICTURES).toString();
+        filesDir = getCacheDir().toString();
 
         mGoogleApiClient = new GoogleApiClient.Builder(this)
                 .addConnectionCallbacks(new GoogleApiClient.ConnectionCallbacks() {
@@ -398,7 +398,6 @@ public class WearActivity extends WearableActivity implements
 
                     File file = new File(filesDir, WearActivity.VOICE_FILE_NAME);
 //                    file.createNewFile();
-                    Log.e("SoundRecorder", "send file " + file.getAbsolutePath());
                     OutputStream outputStream = channel.getOutputStream(mGoogleApiClient).await().getOutputStream();
                     outputStream.flush();
                     IOUtils.copyStream(

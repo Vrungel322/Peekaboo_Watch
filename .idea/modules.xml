@@ -3,7 +3,6 @@
   <component name="ProjectModuleManager">
     <modules>
       <module fileurl="file://$PROJECT_DIR$/Peekaboo_Watch.iml" filepath="$PROJECT_DIR$/Peekaboo_Watch.iml" />
-      <module fileurl="file://$PROJECT_DIR$/andemo.iml" filepath="$PROJECT_DIR$/andemo.iml" />
       <module fileurl="file://$PROJECT_DIR$/mobile/mobile.iml" filepath="$PROJECT_DIR$/mobile/mobile.iml" />
       <module fileurl="file://$PROJECT_DIR$/skinlib/skinlib.iml" filepath="$PROJECT_DIR$/skinlib/skinlib.iml" />
       <module fileurl="file://$PROJECT_DIR$/wear/wear.iml" filepath="$PROJECT_DIR$/wear/wear.iml" />

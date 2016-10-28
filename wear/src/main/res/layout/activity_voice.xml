@@ -5,26 +5,17 @@
     android:id="@+id/voice_dialog"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="#248F8F"
     >
 
-    <TextView
-        android:id="@+id/position"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal|top"
-        android:layout_marginTop="32dp"
-        app:layout_box="all"
-        android:gravity="center"
-        android:textSize="24sp"
-        android:typeface="monospace"
-        android:text="15:25" />
 
     <android.support.wearable.view.CircularButton
         android:id="@android:id/button1"
         android:layout_width="48dp"
         android:layout_height="48dp"
         android:layout_marginBottom="8dp"
-        android:layout_gravity="bottom|center_horizontal"
+        android:layout_marginRight="8dp"
+        android:layout_gravity="bottom|right"
         app:layout_box="bottom"
         app:imageScaleMode="center"
         android:src="@drawable/ic_play_arrow_black_48dp"
@@ -41,5 +32,28 @@
         android:visibility="invisible"
         />
 
+    <android.support.wearable.view.CircularButton
+        android:id="@android:id/button3"
+        android:layout_width="56dp"
+        android:layout_height="56dp"
+        android:layout_marginTop="8dp"
+        android:layout_gravity="bottom|left"
+        app:layout_box="all"
+        app:imageScaleMode="center"
+        android:src="@drawable/ic_send_black_48dp"
+        />
+
+
+    <TextView
+        android:id="@+id/position"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal|bottom"
+        android:layout_marginTop="32dp"
+        app:layout_box="all"
+        android:gravity="center"
+        android:textSize="20sp"
+        android:typeface="monospace"
+        android:text="15:25" />
 
 </android.support.wearable.view.BoxInsetLayout>

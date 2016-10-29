@@ -15,15 +15,19 @@ import android.support.wearable.activity.WearableActivity;
 import android.support.wearable.view.CircularButton;
 import android.text.TextUtils;
 import android.view.View;
+import android.widget.ImageButton;
 import android.widget.TextView;
 
 import java.io.File;
 
+import static android.view.View.GONE;
+
 public class VoiceActivity extends WearableActivity implements View.OnClickListener {
 
-    CircularButton mButton1;
+    ImageButton mButton1;
     CircularButton mButton2;
     TextView mPositionView;
+    TextView mDescription;
     int playback_time;
     int recording_time;
     int recording_size;
@@ -79,7 +83,9 @@ public class VoiceActivity extends WearableActivity implements View.OnClickListe
         super.onCreate(saved);
         setContentView(R.layout.activity_voice);
         mPositionView = (TextView) findViewById(R.id.position);
-        mButton1 = (CircularButton) findViewById(android.R.id.button1);
+        mDescription = (TextView) findViewById(R.id.descr);
+
+        mButton1 = (ImageButton) findViewById(android.R.id.button1);
         mButton2 = (CircularButton) findViewById(android.R.id.button2);
         mButton1.setOnClickListener(this);
         mButton2.setOnClickListener(this);
@@ -166,35 +172,48 @@ public class VoiceActivity extends WearableActivity implements View.OnClickListe
         if (recorder == null) {
             if (!TextUtils.isEmpty(mPositionView.getText()))
                 mPositionView.setText("");
-            mButton1.setImageResource(R.drawable.ic_close_black_48dp);
-            mButton2.setVisibility(View.INVISIBLE);
+            mDescription.setVisibility(GONE);
+
+//            mButton1.setImageResource(R.drawable.ic_close_black_48dp);
+//            mButton2.setVisibility(View.INVISIBLE);
             return;
         }
         if (recorder.getState() == SoundRecorder.State.IDLE) {
             if (recording_failed) {
-                mPositionView.setText("Recording failed");
-                mButton1.setImageResource(R.drawable.ic_close_black_48dp);
+                mDescription.setText("Recording failed");
+                mDescription.setVisibility(View.VISIBLE);
+                mButton1.setImageResource(R.drawable.ic_close);
                 mButton2.setVisibility(View.INVISIBLE);
             }
             else {
-                mPositionView.setText("Send\nvoice message?");
-                mButton1.setImageResource(R.drawable.ic_play_arrow_black_48dp);
-                mButton2.setVisibility(View.VISIBLE);
+                mDescription.setText("Send\nvoice message?");
+                mDescription.setVisibility(View.VISIBLE);
+                mButton1.setImageResource(R.drawable.ic_play);
+//                mButton2.setVisibility(View.VISIBLE);
             }
             return;
         }
         if (recorder.getState() == SoundRecorder.State.RECORDING) {
-            String txt = String.format("%1$tM:%1$tS %2$1.2fmb ", (long) recording_time, recording_size / (float) (1024 * 1024));
+            String txt = String.format("%1$tM:%1$tS", (long) recording_time);
+
             mPositionView.setText(txt);
-            mButton1.setImageResource(R.drawable.ic_stop_black_48dp);
-            mButton2.setVisibility(View.INVISIBLE);
+            mDescription.setVisibility(GONE);
+            mButton1.setImageResource(R.drawable.ic_pause);
+
+//            mButton1.setImageResource(R.drawable.ic_stop_black_48dp);
+//            mButton2.setVisibility(View.INVISIBLE);
             return;
         }
         if (recorder.getState() == SoundRecorder.State.PLAYING) {
-            String txt = String.format("%1$tM:%1$tS / %2$tM:%2$tS ", (long) playback_time, (long) recording_time);
+//            String txt = String.format("%1$tM:%1$tS / %2$tM:%2$tS", (long) playback_time, (long) recording_time);
+            String txt = String.format("%1$tM:%1$tS", (long) playback_time);
+
             mPositionView.setText(txt);
-            mButton1.setImageResource(R.drawable.ic_stop_black_48dp);
-            mButton2.setVisibility(View.INVISIBLE);
+            mDescription.setVisibility(GONE);
+            mButton1.setImageResource(R.drawable.ic_pause);
+
+//            mButton1.setImageResource(R.drawable.ic_stop_black_48dp);
+//            mButton2.setVisibility(View.INVISIBLE);
             return;
         }
     }

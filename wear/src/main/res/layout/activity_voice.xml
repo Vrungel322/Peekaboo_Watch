@@ -1,59 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
-<android.support.wearable.view.BoxInsetLayout
-    xmlns:android="http://schemas.android.com/apk/res/android"
+<android.support.wearable.view.BoxInsetLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/voice_dialog"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="#248F8F"
-    >
+    android:padding="15dp">
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:padding="5dp"
+        app:layout_box="all">
+
+        <TextView
+            android:id="@+id/descr"
+            android:gravity="center"
+            android:layout_gravity="center_horizontal"
+            android:layout_width="wrap_content"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:layout_height="wrap_content"
+            android:text="Send \n your message"
+            android:visibility="gone"/>
+
+        <android.support.wearable.view.CircularButton
+            android:id="@android:id/button2"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_gravity="bottom|right"
+            android:src="@drawable/ic_check"
+            app:imageScaleMode="center"
+            app:layout_box="bottom|right" />
+
+        <ImageButton
+            android:id="@android:id/button1"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@null"
+            android:src="@drawable/ic_pause"
+            android:layout_marginTop="8dp"
+            android:layout_marginBottom="8dp"
+            app:layout_box="all" />
+
+        <android.support.wearable.view.CircularButton
+            android:id="@android:id/button3"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:layout_gravity="bottom|left"
+            android:src="@drawable/ic_delete"
+            app:imageScaleMode="center"
+            app:layout_box="bottom|left" />
 
 
-    <android.support.wearable.view.CircularButton
-        android:id="@android:id/button1"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginBottom="8dp"
-        android:layout_marginRight="8dp"
-        android:layout_gravity="bottom|right"
-        app:layout_box="bottom"
-        app:imageScaleMode="center"
-        android:src="@drawable/ic_play_arrow_black_48dp"
-        />
-    <android.support.wearable.view.CircularButton
-        android:id="@android:id/button2"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:layout_marginTop="8dp"
-        android:layout_gravity="center"
-        app:layout_box="all"
-        app:imageScaleMode="center"
-        android:src="@drawable/ic_send_black_48dp"
-        android:visibility="invisible"
-        />
+        <TextView
+            android:id="@+id/position"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center_horizontal|bottom"
+            android:gravity="center"
+            android:paddingRight="10dp"
+            android:paddingLeft="10dp"
+            android:text="15:25"
+            android:layout_marginBottom="10dp"
+            android:textSize="18sp"
+            android:typeface="monospace"
+            app:layout_box="all" />
+    </FrameLayout>
 
-    <android.support.wearable.view.CircularButton
-        android:id="@android:id/button3"
-        android:layout_width="56dp"
-        android:layout_height="56dp"
-        android:layout_marginTop="8dp"
-        android:layout_gravity="bottom|left"
-        app:layout_box="all"
-        app:imageScaleMode="center"
-        android:src="@drawable/ic_send_black_48dp"
-        />
-
-
-    <TextView
-        android:id="@+id/position"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
-        android:layout_gravity="center_horizontal|bottom"
-        android:layout_marginTop="32dp"
-        app:layout_box="all"
-        android:gravity="center"
-        android:textSize="20sp"
-        android:typeface="monospace"
-        android:text="15:25" />
 
 </android.support.wearable.view.BoxInsetLayout>
